@@ -74,38 +74,41 @@ const hasLocalStorage = localStorageDisponible();
  * 2. localStorage
  * 3. null si no existe información
  */
+/* --- INICIO CONEXIÓN FIREBASE --- */
+const firebaseConfig = {
+  apiKey: "AIzaSyABgoxELml0chya1waw0mFEeLX5oysfa2c",
+  authDomain: "mes-produccion-tocancipa.firebaseapp.com",
+  databaseURL: "https://mes-produccion-tocancipa-default-rtdb.firebaseio.com",
+  projectId: "mes-produccion-tocancipa",
+  storageBucket: "mes-produccion-tocancipa.firebasestorage.app",
+  messagingSenderId: "748547004390",
+  appId: "1:748547004390:web:4c4a27eeba8d0795592827"
+};
+
+if (!firebase.apps.length) {
+  firebase.initializeApp(firebaseConfig);
+}
+const db = firebase.database();
+/* --- FIN CONEXIÓN FIREBASE --- */
+
 async function storageGet(key){
-  if (hasArtifactStorage){
-    try{
-      const resultado = await window.storage.get(key, false);
-
-      if (
-        resultado !== null &&
-        resultado !== undefined &&
-        resultado.value !== undefined
-      ){
-        return resultado.value;
-      }
-    }catch(error){
-      console.warn(
-        `No se pudo leer ${key} desde window.storage:`,
-        error
-      );
-    }
+  try {
+    const snapshot = await db.ref(key).once('value');
+    return snapshot.exists() ? snapshot.val() : null;
+  } catch (error) {
+    console.error(`Error leyendo ${key} de Firebase:`, error);
+    return null;
   }
+}
 
-  if (hasLocalStorage){
-    try{
-      return window.localStorage.getItem(key);
-    }catch(error){
-      console.error(
-        `No se pudo leer ${key} desde localStorage:`,
-        error
-      );
-    }
+async function storageSet(key, value){
+  try {
+    await db.ref(key).set(value);
+    return true;
+  } catch (error) {
+    console.error(`Error guardando ${key} en Firebase:`, error);
+    return false;
   }
-
-  return null;
 }
 
 /*
