@@ -20,45 +20,31 @@ document.getElementById('mainNav').addEventListener('click', (e)=>{
 document
   .getElementById('fLinea')
   .addEventListener('change', function(){
-
     actualizarOpOptions();
     actualizarReadout();
-    
-
   });
+
 document
   .getElementById('fOP')
   .addEventListener('input', function(){
-
     actualizarReadout();
-
   });
 document.getElementById('formControl').addEventListener('submit', manejarSubmitControl);
 document.getElementById('btnCerrarOpActual').addEventListener('click', cerrarOpActual);
 
 document
-  .getElementById(
-    'btnIniciarOp'
-  )
+  .getElementById('btnIniciarOp')
   .addEventListener(
     'click',
     async function(){
 
       const linea =
-        document.getElementById(
-          'fLinea'
-        ).value;
+        document.getElementById('fLinea').value;
 
       const op =
-        document.getElementById(
-          'fOP'
-        ).value
-        .trim();
+        document.getElementById('fOP').value.trim();
 
-      if (
-        !linea ||
-        !op
-      ){
+      if (!linea || !op){
         await modalAlerta(
           'Seleccione una OP',
           'Debe seleccionar una línea y una OP antes de iniciar.'
@@ -66,11 +52,7 @@ document
         return;
       }
 
-      const prog =
-        buscarProgramacion(
-          linea,
-          op
-        );
+      const prog = buscarProgramacion(linea, op);
 
       if (!prog){
         await modalError(
@@ -80,9 +62,7 @@ document
         return;
       }
 
-      if (
-        prog.cerrada === true
-      ){
+      if (prog.cerrada === true){
         await modalError(
           'OP cerrada',
           'La OP está cerrada.'
@@ -90,9 +70,7 @@ document
         return;
       }
 
-      if (
-        prog.iniciada === true
-      ){
+      if (prog.iniciada === true){
         await modalAlerta(
           'OP ya iniciada',
           'La OP ya se encuentra en producción.'
@@ -107,7 +85,7 @@ document
           p.linea.trim().toUpperCase() === linea.trim().toUpperCase() && 
           p.iniciada === true && 
           p.cerrada !== true &&
-          p.op !== prog.op // Nos aseguramos de no evaluarnos a nosotros mismos
+          p.op !== prog.op
       );
 
       if (opActivaEnLinea) {
@@ -122,83 +100,43 @@ document
       prog.iniciada = true;
 
       state.historialOps.push({
-
-        linea:
-          prog.linea,
-
-        op:
-          prog.op,
-
-        uph:
-          prog.uph,
-
-        inicioReal:
-          new Date()
-            .toISOString(),
-
-        finReal:
-          null
-
+        linea: prog.linea,
+        op: prog.op,
+        uph: prog.uph,
+        inicioReal: new Date().toISOString(),
+        finReal: null
       });
 
       await guardarProgramacion();
-
       await guardarHistorialOps();
 
       actualizarReadout();
-      
-      // NUEVO: Repintamos el dashboard automáticamente para mostrar la hora
       renderTodo();
 
       await modalExito(
         'OP iniciada',
         `La OP ${prog.op} inició correctamente.`
       );
-
     }
   );
+
 document.getElementById('formProgramacion').addEventListener('submit', manejarSubmitProgramacion);
 document.getElementById('buscarHistorico').addEventListener('input', renderHistorico);
 document.getElementById('btnExportarHistorico').addEventListener('click', exportarHistoricoXLSX);
 document.getElementById('btnResetDemo').addEventListener('click', confirmarResetDemo);
 
 document
-  .getElementById(
-    'btnCorteTurno'
-  )
-  .addEventListener(
-    'click',
-    function(){
-
-      document
-        .getElementById(
-          'corteOverlay'
-        )
-        .classList.add(
-          'show'
-        );
-
-    }
-  );
+  .getElementById('btnCorteTurno')
+  .addEventListener('click', function(){
+      document.getElementById('corteOverlay').classList.add('show');
+  });
 
 document
-  .getElementById(
-    'btnCerrarCorte'
-  )
-  .addEventListener(
-    'click',
-    function(){
+  .getElementById('btnCerrarCorte')
+  .addEventListener('click', function(){
+      document.getElementById('corteOverlay').classList.remove('show');
+  });
 
-      document
-        .getElementById(
-          'corteOverlay'
-        )
-        .classList.remove(
-          'show'
-        );
-
-    }
-  );
 /* --- INICIO NUEVO EVENTO: BOTÓN CALCULAR CORTE --- */
 document.getElementById('btnCalcularCorte').addEventListener('click', async function(){
   
@@ -249,8 +187,8 @@ document.getElementById('btnCalcularCorte').addEventListener('click', async func
   document.getElementById('chkCena').checked = false;
 });
 /* --- FIN NUEVO EVENTO: BOTÓN CALCULAR CORTE --- */
+
 /* --- INICIO DEL CÓDIGO CORREGIDO PARA CERRAR MODALES --- */
-// 1. Cierre del modal de alertas generales
 document.getElementById('modalOverlay').addEventListener('click', (e)=>{
   if (e.target.id === 'modalOverlay'){ 
     cerrarModal(); 
@@ -258,7 +196,6 @@ document.getElementById('modalOverlay').addEventListener('click', (e)=>{
   }
 });
 
-// 2. Cierre del modal de Corte de Turno al hacer clic afuera
 document.getElementById('corteOverlay').addEventListener('click', function(e){
   if (e.target.id === 'corteOverlay'){
     document.getElementById('corteOverlay').classList.remove('show');
@@ -272,84 +209,35 @@ window.addEventListener('resize', ()=>{
 });
 
 /* ---------------- Carga de Programación desde MASTER (solo analista) ---------------- */
-// La clave de analista (ANALISTA_PIN) viene de datos.js — por defecto
-// desde json/config.json si el navegador pudo leerlo, o '1234' si no.
-// Es una validación simple del lado del cliente (disuasoria, no
-// criptográfica: cualquiera con acceso al código fuente podría verla).
-
 let _importParsed = null;
 
 function parseNumero(raw){
-  if (raw === null || raw === undefined){
-    return NaN;
-  }
+  if (raw === null || raw === undefined) return NaN;
+  let texto = String(raw).trim().replace(/\s/g, '');
+  if (texto === '') return NaN;
 
-  let texto = String(raw)
-    .trim()
-    .replace(/\s/g, '');
-
-  if (texto === ''){
-    return NaN;
-  }
-
-  /*
-   * Caso 1: número con coma y punto.
-   *
-   * Ejemplos:
-   * 1,499.50  -> formato con coma de miles
-   * 1.499,50  -> formato con coma decimal
-   */
   if (texto.includes(',') && texto.includes('.')){
     const ultimaComa = texto.lastIndexOf(',');
     const ultimoPunto = texto.lastIndexOf('.');
-
     if (ultimaComa > ultimoPunto){
-      texto = texto
-        .replace(/\./g, '')
-        .replace(',', '.');
+      texto = texto.replace(/\./g, '').replace(',', '.');
     } else {
       texto = texto.replace(/,/g, '');
     }
-  }
-
-  /*
-   * Caso 2: solo existe una coma.
-   *
-   * Tres dígitos después de la coma se interpretan como miles:
-   * 14,888 -> 14888
-   *
-   * Uno o dos dígitos se interpretan como decimales:
-   * 7,66 -> 7.66
-   */
-  else if (texto.includes(',')){
+  } else if (texto.includes(',')){
     const partes = texto.split(',');
     const parteFinal = partes[partes.length - 1];
-
-    if (
-      partes.length > 2 ||
-      parteFinal.length === 3
-    ){
+    if (partes.length > 2 || parteFinal.length === 3){
       texto = texto.replace(/,/g, '');
     } else {
       texto = texto.replace(',', '.');
     }
-  }
-
-  /*
-   * Caso 3: varios puntos.
-   * Se interpretan como separadores de miles.
-   *
-   * 505.621 -> 505621
-   */
-  else if ((texto.match(/\./g) || []).length > 1){
+  } else if ((texto.match(/\./g) || []).length > 1){
     texto = texto.replace(/\./g, '');
   }
 
   const numero = Number(texto);
-
-  return Number.isFinite(numero)
-    ? numero
-    : NaN;
+  return Number.isFinite(numero) ? numero : NaN;
 }
 
 function parseHoraCampo(raw){
@@ -362,8 +250,9 @@ function parseHoraCampo(raw){
   }
   const n = parseNumero(s);
   if (Number.isNaN(n)) return NaN;
-  return (n > 0 && n < 1) ? n*24 : n; // fracción de día estilo Excel -> horas
+  return (n > 0 && n < 1) ? n*24 : n; 
 }
+
 function normalizarLinea(raw){
   const s = (raw||'').trim().toUpperCase().replace(/\s+/g,' ');
   const compacta = s.replace(/\s+/g,'');
@@ -371,61 +260,31 @@ function normalizarLinea(raw){
   return encontrada || s;
 }
 
-// Columnas esperadas (igual que MASTER -> PROGRAMACION en el libro original):
-// D=Turno E=Línea I=OP J=Código K=Descripción O=UPH R=H Setup S=H Ejec T=H Inicio U=H Fin V=Cantidad
 function parseMasterPegado(texto){
   const filasTexto = texto.split(/\r\n|\r|\n/).filter(l=>l.trim() !== '');
-  const filas = filasTexto.slice(1); // la primera fila es encabezado, igual que al pegar desde A1
+  const filas = filasTexto.slice(1); 
   const resultado = [];
   const lineasDesconocidas = new Set();
-let totalUnidadesTeoricas = 0;
+  let totalUnidadesTeoricas = 0;
 
-filasTexto.forEach(function(lineaTexto){
+  filasTexto.forEach(function(lineaTexto){
+    const columnas = lineaTexto.split('\t');
+    const indiceEtiqueta = columnas.findIndex(function(columna){
+      const texto = String(columna).toUpperCase().replace(/\s+/g, ' ').trim();
+      return texto.includes('TOTAL UNIDADES TEORICAS');
+    });
 
-  const columnas = lineaTexto.split('\t');
+    if (indiceEtiqueta === -1) return;
 
-const indiceEtiqueta =
-  columnas.findIndex(function(columna){
-
-    const texto =
-      String(columna)
-        .toUpperCase()
-        .replace(/\s+/g, ' ')
-        .trim();
-
-    return texto.includes(
-      'TOTAL UNIDADES TEORICAS'
-    );
-
+    for (let i = indiceEtiqueta + 1; i < columnas.length; i++){
+      const valor = parseNumero(columnas[i]);
+      if (Number.isFinite(valor) && valor > 0){
+        totalUnidadesTeoricas = valor;
+        console.log('TOTAL TEORICO ENCONTRADO:', valor);
+        break;
+      }
+    }
   });
-
-  if (indiceEtiqueta === -1){
-    return;
-  }
-
-  for (
-    let i = indiceEtiqueta + 1;
-    i < columnas.length;
-    i++
-  ){
-
-    const valor =
-      parseNumero(columnas[i]);
-if (
-  Number.isFinite(valor) &&
-  valor > 0
-){
-  totalUnidadesTeoricas = valor;
-
-  console.log(
-    'TOTAL TEORICO ENCONTRADO:',
-    valor
-  );
-
-  break;
-}
-  }
-});
 
   filas.forEach(linea=>{
     const cols = linea.split('\t');
@@ -451,25 +310,25 @@ if (
 
     const saldo = parseNumero(cols[12]);
 
-   resultado.push({
-  turno: turno.toUpperCase(),
-  linea: linea_norm,
-  op,
-  codigo: (cols[9] || '').trim(),
-  producto: (cols[10] || '').trim(),
-  uph,
-  horaInicio: Number.isFinite(hInicio) ? hInicio : 0,
-  duracion,
-  cantidad: Number.isFinite(saldo) ? saldo : 0,
-   });
+    resultado.push({
+      turno: turno.toUpperCase(),
+      linea: linea_norm,
+      op,
+      codigo: (cols[9] || '').trim(),
+      producto: (cols[10] || '').trim(),
+      uph,
+      horaInicio: Number.isFinite(hInicio) ? hInicio : 0,
+      duracion,
+      cantidad: Number.isFinite(saldo) ? saldo : 0,
+    });
   });
 
   return {
-  filas: resultado,
-  totalPegado: filas.length,
-  lineasDesconocidas: Array.from(lineasDesconocidas),
-  totalUnidadesTeoricas
-};
+    filas: resultado,
+    totalPegado: filas.length,
+    lineasDesconocidas: Array.from(lineasDesconocidas),
+    totalUnidadesTeoricas
+  };
 }
 
 function abrirImportModal(){
@@ -509,157 +368,56 @@ document.getElementById('importPinInput').addEventListener('keydown', (e)=>{
 document
   .getElementById('importPasteAnalizar')
   .addEventListener('click', function(){
+    const textarea = document.getElementById('importTextarea');
+    const preview = document.getElementById('importPreview');
 
-    const textarea =
-      document.getElementById('importTextarea');
-
-    const preview =
-      document.getElementById('importPreview');
-
-    if (!textarea || !preview){
-      console.error(
-        'No se encontraron importTextarea o importPreview.'
-      );
-      return;
-    }
+    if (!textarea || !preview) return;
 
     const texto = textarea.value;
 
     if (!texto || !texto.trim()){
-      preview.innerHTML =
-        '<span style="color:var(--st-atrasado); font-weight:600;">' +
-        'Pega los datos antes de analizar.' +
-        '</span>';
-
+      preview.innerHTML = '<span style="color:var(--st-atrasado); font-weight:600;">Pega los datos antes de analizar.</span>';
       return;
     }
 
     try{
       const resultado = parseMasterPegado(texto);
-state.totalUnidadesTeoricas =
-  Number(
-    resultado.totalUnidadesTeoricas || 0
-  );
-guardarTotalTeorico();
+      state.totalUnidadesTeoricas = Number(resultado.totalUnidadesTeoricas || 0);
+      guardarTotalTeorico();
 
-console.log(
-  'TOTAL GUARDADO EN STATE:',
-  state.totalUnidadesTeoricas
-);
-
-      const filas =
-        Array.isArray(resultado.filas)
-          ? resultado.filas
-          : [];
-
-      const totalPegado =
-        Number(resultado.totalPegado || 0);
-
-      const lineasDesconocidas =
-        Array.isArray(resultado.lineasDesconocidas)
-          ? resultado.lineasDesconocidas
-          : [];
+      const filas = Array.isArray(resultado.filas) ? resultado.filas : [];
+      const totalPegado = Number(resultado.totalPegado || 0);
+      const lineasDesconocidas = Array.isArray(resultado.lineasDesconocidas) ? resultado.lineasDesconocidas : [];
 
       _importParsed = filas;
 
       if (!filas.length){
-        preview.innerHTML =
-          '<span style="color:var(--st-atrasado); font-weight:600;">' +
-          'No se encontraron filas válidas. Revisa Turno, Línea, ' +
-          'OP, UPH y la ubicación de las columnas del MASTER.' +
-          '</span>';
-
+        preview.innerHTML = '<span style="color:var(--st-atrasado); font-weight:600;">No se encontraron filas válidas. Revisa Turno, Línea, OP, UPH y la ubicación de las columnas del MASTER.</span>';
         return;
       }
 
-      const lineasSet = new Set(
-        filas.map(function(fila){
-          return fila.linea;
-        })
-      );
-
-      let mensaje =
-        '<b style="color:var(--purple-700); ' +
-        'font-family:var(--font-display);">' +
-        filas.length +
-        '</b> OP válidas de <b>' +
-        totalPegado +
-        '</b> filas pegadas, en <b>' +
-        lineasSet.size +
-        '</b> línea(s).';
+      const lineasSet = new Set(filas.map(function(fila){ return fila.linea; }));
+      let mensaje = '<b style="color:var(--purple-700); font-family:var(--font-display);">' + filas.length + '</b> OP válidas de <b>' + totalPegado + '</b> filas pegadas, en <b>' + lineasSet.size + '</b> línea(s).';
 
       if (lineasDesconocidas.length){
-        mensaje +=
-          '<br><span style="color:var(--st-enriesgo); ' +
-          'font-weight:600;">' +
-          'Línea(s) no reconocida(s): ' +
-          lineasDesconocidas.join(', ') +
-          '.</span>';
+        mensaje += '<br><span style="color:var(--st-enriesgo); font-weight:600;">Línea(s) no reconocida(s): ' + lineasDesconocidas.join(', ') + '.</span>';
       }
 
       preview.innerHTML = mensaje;
 
-      const pasoPegar =
-        document.getElementById('importStepPaste');
+      const pasoPegar = document.getElementById('importStepPaste');
+      const pasoConfirmar = document.getElementById('importStepConfirm');
+      const mensajeConfirmacion = document.getElementById('importConfirmMsg');
 
-      const pasoConfirmar =
-        document.getElementById('importStepConfirm');
+      const cantidadActual = window.state && Array.isArray(window.state.programacion) ? window.state.programacion.length : (typeof state !== 'undefined' && Array.isArray(state.programacion) ? state.programacion.length : 0);
 
-      const mensajeConfirmacion =
-        document.getElementById('importConfirmMsg');
-
-      if (!pasoPegar){
-        throw new Error(
-          'No existe el elemento importStepPaste en index.html.'
-        );
-      }
-
-      if (!pasoConfirmar){
-        throw new Error(
-          'No existe el elemento importStepConfirm en index.html.'
-        );
-      }
-
-      if (!mensajeConfirmacion){
-        throw new Error(
-          'No existe el elemento importConfirmMsg en index.html.'
-        );
-      }
-
-      const cantidadActual =
-        window.state &&
-        Array.isArray(window.state.programacion)
-          ? window.state.programacion.length
-          : (
-              typeof state !== 'undefined' &&
-              Array.isArray(state.programacion)
-                ? state.programacion.length
-                : 0
-            );
-
-      mensajeConfirmacion.textContent =
-        'Esto reemplazará las ' +
-        cantidadActual +
-        ' OP actuales de Programación por las ' +
-        filas.length +
-        ' OP recién analizadas. ' +
-        'Los registros del Histórico no se modificarán. ' +
-        '¿Confirmas la carga?';
+      mensajeConfirmacion.textContent = 'Esto reemplazará las ' + cantidadActual + ' OP actuales de Programación por las ' + filas.length + ' OP recién analizadas. Los registros del Histórico no se modificarán. ¿Confirmas la carga?';
 
       pasoPegar.style.display = 'none';
       pasoConfirmar.style.display = 'block';
 
     }catch(error){
-      console.error(
-        'Error al analizar MASTER:',
-        error
-      );
-
-      preview.innerHTML =
-        '<span style="color:var(--st-atrasado); font-weight:600;">' +
-        'Error al preparar la carga: ' +
-        String(error.message || error) +
-        '</span>';
+      preview.innerHTML = '<span style="color:var(--st-atrasado); font-weight:600;">Error al preparar la carga: ' + String(error.message || error) + '</span>';
     }
   });
 
@@ -671,21 +429,11 @@ document.getElementById('importConfirmBack').addEventListener('click', ()=>{
 document
   .getElementById('importConfirmOk')
   .addEventListener('click', async function(){
-
-    const boton =
-      document.getElementById('importConfirmOk');
+    const boton = document.getElementById('importConfirmOk');
 
     try{
-      if (
-        !_importParsed ||
-        !Array.isArray(_importParsed) ||
-        !_importParsed.length
-      ){
-        await modalError(
-          'Sin información',
-          'No hay una programación analizada para guardar.'
-        );
-
+      if (!_importParsed || !Array.isArray(_importParsed) || !_importParsed.length){
+        await modalError('Sin información', 'No hay una programación analizada para guardar.');
         return;
       }
 
@@ -694,15 +442,22 @@ document
         boton.textContent = 'Guardando...';
       }
 
+      /* --- INICIO NUEVO CÓDIGO: LIMPIEZA AUTOMÁTICA DE FANTASMAS --- */
+      // Cuando el analista carga un nuevo programa, cerramos todos los cronómetros huérfanos del día anterior
+      state.historialOps.forEach(t => {
+        if (t.finReal === null) {
+          t.finReal = new Date().toISOString();
+        }
+      });
+      await guardarHistorialOps();
+      /* --- FIN NUEVO CÓDIGO --- */
+
       /* --- INICIO NUEVO CÓDIGO: CONSERVAR ESTADOS AL CARGAR MASTER --- */
       state.programacion = _importParsed.map(
         function(programa){
-          // 1. Buscamos si esta OP ya existía en la memoria actual
           const opPrevia = state.programacion.find(
             p => p.linea === programa.linea && String(p.op) === String(programa.op)
           );
-
-          // 2. Fusionamos los datos frescos del Excel con el estado guardado
           return { 
             ...programa,
             iniciada: opPrevia ? opPrevia.iniciada : false,
@@ -725,28 +480,11 @@ document
 
       await modalExito(
         'Programación cargada',
-        'Se cargaron ' +
-        state.programacion.length +
-        ' OP desde MASTER.'
+        'Se cargaron ' + state.programacion.length + ' OP desde MASTER.'
       );
-
-      if (guardado === false){
-        console.warn(
-          'La programación se cargó en memoria, pero no se confirmó la persistencia.'
-        );
-      }
 
     }catch(error){
-      console.error(
-        'Error al guardar la programación:',
-        error
-      );
-
-      await modalError(
-        'No se pudo guardar',
-        String(error.message || error)
-      );
-
+      await modalError('No se pudo guardar', String(error.message || error));
     }finally{
       if (boton){
         boton.disabled = false;
@@ -756,9 +494,6 @@ document
   });
 
 /* ---------------- Exportar Histórico a Excel (.xlsx) ---------------- */
-// Usa SheetJS (cargado en index.html desde cdnjs). Genera un libro real
-// por columnas y filas, con encabezados y autofiltro, listo para abrir
-// en Excel y analizar/dinamizar los datos.
 function exportarHistoricoXLSX(){
   if (!state.historico.length){
     modalAlerta('Sin datos', 'Todavía no hay registros en el Histórico para exportar.');
@@ -770,49 +505,22 @@ function exportarHistoricoXLSX(){
   }
 
   const registros = state.historico.slice().sort((a,b)=>a.ts.localeCompare(b.ts));
- const filas = registros.map(r=>({
-
-  'Fecha': fechaTexto(r.fecha),
-
-  'Fecha Operativa':
-    r.fechaOperativa
-      ? fechaTexto(r.fechaOperativa)
-      : '',
-
-  'Hora': r.hora,
-
-  'Línea': r.linea,
-
-  'OP': r.op,
-
-  'Acumulado Real':
-    Math.round(r.acumulado),
-
-  'Usuario': r.usuario,
-
-  'Observación':
-    r.observacion || '',
-
-  'Cantidad Hora':
-    Math.round(r.cantidadHora),
-
-  'Estado Hora':
-    r.estadoHora || '',
-
-  'Plan Acumulado':
-    Math.round(r.planAcumulado),
-
-  'Diferencia':
-    Math.round(r.diferencia),
-
-  'Cumplimiento':
-    r.cumplimiento,
-
-  'Estado':
-    r.estado,
-
-}));
-
+  const filas = registros.map(r=>({
+    'Fecha': fechaTexto(r.fecha),
+    'Fecha Operativa': r.fechaOperativa ? fechaTexto(r.fechaOperativa) : '',
+    'Hora': r.hora,
+    'Línea': r.linea,
+    'OP': r.op,
+    'Acumulado Real': Math.round(r.acumulado),
+    'Usuario': r.usuario,
+    'Observación': r.observacion || '',
+    'Cantidad Hora': Math.round(r.cantidadHora),
+    'Estado Hora': r.estadoHora || '',
+    'Plan Acumulado': Math.round(r.planAcumulado),
+    'Diferencia': Math.round(r.diferencia),
+    'Cumplimiento': r.cumplimiento,
+    'Estado': r.estado,
+  }));
 
   const ws = XLSX.utils.json_to_sheet(filas);
   const headers = Object.keys(filas[0]);
@@ -822,52 +530,13 @@ function exportarHistoricoXLSX(){
     if (ws[addr]) ws[addr].z = '0.0%';
   });
   ws['!cols'] = [
-
-  {wch:11}, // Fecha
-
-  {wch:13}, // Fecha Operativa
-
-  {wch:9},  // Hora
-
-  {wch:12}, // Línea
-
-  {wch:14}, // OP
-
-  {wch:14}, // Acumulado
-
-  {wch:12}, // Usuario
-
-  {wch:26}, // Observación
-
-  {wch:12}, // Cantidad Hora
-
-  {wch:16}, // Estado Hora
-
-  {wch:13}, // Plan Acumulado
-
-  {wch:11}, // Diferencia
-
-  {wch:13}, // Cumplimiento
-
-  {wch:12}  // Estado
-
-];
+    {wch:11}, {wch:13}, {wch:9}, {wch:12}, {wch:14}, {wch:14}, {wch:12}, {wch:26}, {wch:12}, {wch:16}, {wch:13}, {wch:11}, {wch:13}, {wch:12} 
+  ];
   ws['!autofilter'] = { ref: ws['!ref'] };
-const wb = XLSX.utils.book_new();
+  const wb = XLSX.utils.book_new();
 
-/* Hoja Producción */
-XLSX.utils.book_append_sheet(
-  wb,
-  ws,
-  'PRODUCCION'
-);
-
-/* Guardar archivo */
-XLSX.writeFile(
-  wb,
-  `historico_produccion_${fechaISO(new Date())}.xlsx`
-);
-
+  XLSX.utils.book_append_sheet(wb, ws, 'PRODUCCION');
+  XLSX.writeFile(wb, `historico_produccion_${fechaISO(new Date())}.xlsx`);
 }
 
 /* --- INICIO NUEVO CÓDIGO: AUTO-REFRESH TOTAL --- */
@@ -875,31 +544,21 @@ let pesoDatosAnterior = "";
 
 async function verificarActualizaciones() {
   try {
-    // 1. Obtenemos el texto crudo de las 3 bases de datos (si no hay, usamos "[]")
     const histRaw = await storageGet(STORAGE_KEY_HIST) || "[]";
     const progRaw = await storageGet(STORAGE_KEY_PROG) || "[]";
     const opsRaw  = await storageGet(STORAGE_KEY_HISTORIAL_OPS) || "[]";
 
-    // 2. Sumamos la cantidad de caracteres de las 3 bases para crear una "huella"
     const pesoActual = histRaw.length + "-" + progRaw.length + "-" + opsRaw.length;
 
-    // 3. Primera vez: guardamos la huella y salimos
     if (pesoDatosAnterior === "") {
       pesoDatosAnterior = pesoActual;
       return; 
     }
 
-    // 4. Si la huella cambió (Alguien Inició OP, Cerró OP, Grabó o Cargó programa)
     if (pesoActual !== pesoDatosAnterior) {
       console.log("Nuevos datos detectados en BD. Actualizando pantalla...");
-      
-      // Re-cargamos TODO el estado desde cero para atrapar cualquier cambio
       await inicializarEstado();
-      
-      // Actualizamos nuestra huella
       pesoDatosAnterior = pesoActual;
-      
-      // Repintamos todas las tablas y gráficos
       renderTodo();
     }
   } catch (error) {
@@ -907,20 +566,19 @@ async function verificarActualizaciones() {
   }
 }
 /* --- FIN NUEVO CÓDIGO --- */
+
 /* ---------------- Inicio de la aplicación ---------------- */
 async function init(){
-  await cargarConfiguracion();          // json/config.json, parametros.json, programacion-inicial.json (con respaldo si no cargan)
-  await inicializarEstado();            // window.storage o memoria de la sesión
+  await cargarConfiguracion();          
+  await inicializarEstado();            
   poblarSelectLineas(document.getElementById('fLinea'), true);
   poblarSelectLineas(document.getElementById('pLinea'), false);
-
 
   document.getElementById('fUsuario').value = state.usuario || '';
   renderTodo();
   actualizarReloj();
   setInterval(actualizarReloj, 1000);
   
-  // NUEVO: Verificación exacta cada 20 segundos
   setInterval(verificarActualizaciones, 20000);
 }
 init();
