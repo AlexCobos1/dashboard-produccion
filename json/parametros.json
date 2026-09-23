@@ -1,0 +1,57 @@
+{
+  "_comentario": "Parámetros editables de la aplicación.",
+  "lineas": [
+    "VERSAFILL",
+    "JVH1",
+    "JVH2",
+    "PKB 1",
+    "PKB 2",
+    "PKB 3",
+    "PKB 4",
+    "PKB 5",
+    "PKB 6",
+    "MRM",
+    "OMAS",
+    "PROBADORES",
+    "ESMALTES",
+    "MANUAL 1",
+    "MANUAL 2",
+    "MANUAL 3"
+  ],
+  "turnos": [
+    "T1",
+    "T2",
+    "T3"
+  ],
+  "estados": [
+    "ADELANTADO",
+    "EN TIEMPO",
+    "ATRASADO"
+  ],
+  "causalesParo": [
+    {
+      "id": "ALIMENTACION",
+      "nombre": "Tiempo de alimentación",
+      "requiereRevision": false,
+      "activa": true
+    },
+    {
+      "id": "PAUSA_ACTIVA",
+      "nombre": "Pausa activa",
+      "requiereRevision": false,
+      "activa": true
+    },
+    {
+      "id": "LECTURA_PROCEDIMIENTOS",
+      "nombre": "Lectura de procedimientos",
+      "requiereRevision": false,
+      "activa": true
+    },
+    {
+      "id": "CAMBIO_TURNO",
+      "nombre": "Cambio de turno",
+      "requiereRevision": true,
+      "activa": true
+    }
+  ]
+}

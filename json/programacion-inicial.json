@@ -1,0 +1,17 @@
+{
+  "_comentario": "Programación inicial (equivale a la hoja PROGRAMACION). Se usa solo la primera vez que se abre el sistema, o si el analista pulsa 'Restablecer demo'. Para cargar el programa real del día se usa el botón 'Cargar Programa' dentro de la aplicación (pegando el rango de MASTER), no este archivo.",
+  "programacion": [
+    { "linea": "VERSAFILL",  "op": "12750692", "codigo": "20-0121381", "producto": "ES COLORS FLO CITY COL 200ML",  "uph": 1300, "horaInicio": 6,  "duracion": 2.449230769,  "cantidad": 4982   },
+    { "linea": "JVH1",       "op": "12750312", "codigo": "20-0039855", "producto": "CZ NITRO EDT 100 ML",            "uph": 1800, "horaInicio": 6,  "duracion": 21.5,          "cantidad": 113048 },
+    { "linea": "JVH2",       "op": "12750580", "codigo": "20-0082674", "producto": "ES MINI CHI COL KELL CC 120 ML", "uph": 1449, "horaInicio": 7,  "duracion": 12.415113872,  "cantidad": 39000  },
+    { "linea": "PKB 1",      "op": "12750313", "codigo": "20-0122977", "producto": "CZ IN LOVE POTION EDP 50 ML",    "uph": 1500, "horaInicio": 8,  "duracion": 7.989393939,   "cantidad": 15793  },
+    { "linea": "PKB 2",      "op": "12750309", "codigo": "20-0113646", "producto": "LB MISS LBEL PARF 50ML",         "uph": 1500, "horaInicio": 9,  "duracion": 21.5,          "cantidad": 44579  },
+    { "linea": "PKB 3",      "op": "12750714", "codigo": "20-0118219", "producto": "ES FANTASIA AZUL EDP UPG 50ML",  "uph": 1600, "horaInicio": 10, "duracion": 3.429979839,   "cantidad": 7825   },
+    { "linea": "PKB 4",      "op": "12750496", "codigo": "20-0105041", "producto": "ES SALVAJE COLOGNE CC 90 ML",    "uph": 1600, "horaInicio": 14, "duracion": 5.72,          "cantidad": 31000  },
+    { "linea": "PKB 5",      "op": "12750724", "codigo": "20-0120744", "producto": "LB BLEU INFIN PARF 100 ML",      "uph": 1500, "horaInicio": 14, "duracion": 3.703333333,   "cantidad": 12250  },
+    { "linea": "PKB 6",      "op": "12750004", "codigo": "20-0100539", "producto": "ES WINNER SPORT EDP CC 100ML",   "uph": 2700, "horaInicio": 15, "duracion": 12.972478632,  "cantidad": 54123  },
+    { "linea": "MRM",        "op": "12750075", "codigo": "20-0121770", "producto": "CZ CREAM CARAM 37 PERFM 150 ML", "uph": 1300, "horaInicio": 17, "duracion": 10.67,         "cantidad": 15186  },
+    { "linea": "OMAS",       "op": "12750605", "codigo": "20-0108157", "producto": "LB BLEU INTENSE PARF MINI 10ML", "uph": 1400, "horaInicio": 19, "duracion": 6.455714286,   "cantidad": 10073  },
+    { "linea": "PROBADORES", "op": "12750888", "codigo": "20-0098726", "producto": "ES KALOS SPORT CC PLUMA 0.9ML",  "uph": 6000, "horaInicio": 22, "duracion": 5.785666667,   "cantidad": 32694  }
+  ]
+}
