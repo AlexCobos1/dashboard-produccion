@@ -998,6 +998,7 @@ function calcularCorteTurno(opts){
       state.programacion.find(
         p =>
           p.linea === linea &&
+          p.iniciada === true &&
           p.cerrada !== true
       );
 
