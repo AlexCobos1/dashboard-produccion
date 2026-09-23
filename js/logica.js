@@ -1,79 +1,23 @@
 /* ==================================================================
    logica.js — Estado, almacenamiento y reglas de negocio
-   ------------------------------------------------------------------
-   Contiene la réplica exacta de las validaciones y cálculos del
-   módulo VBA "ModuloProduccion.GrabarProduccion" del libro original,
-   más las agregaciones que alimentan el Dashboard (equivalentes a
-   las fórmulas de la hoja DASHBOARD). Depende de datos.js (LINEAS,
-   SEED_PROGRAMACION) — cárgalo después de datos.js en index.html.
    ================================================================== */
 
 /* ---------------- Estado en memoria + almacenamiento ---------------- */
 const state = {
   programacion: [],
-
   historico: [],
-
   historialOps: [],
-
   cortesTurno: [],
   usuario: '',
-
   totalUnidadesTeoricas: 0
 };
 const STORAGE_KEY_PROG = 'sp_programacion_v1';
 const STORAGE_KEY_HIST = 'sp_historico_v1';
 const STORAGE_KEY_USER = 'sp_usuario_v1';
-const STORAGE_KEY_TOTAL_TEORICO =
-  'sp_total_teorico_v1';
-const STORAGE_KEY_CORTES =
-  'sp_cortes_turno_v1';
-const STORAGE_KEY_HISTORIAL_OPS =
-  'sp_historial_ops_v1';
+const STORAGE_KEY_TOTAL_TEORICO = 'sp_total_teorico_v1';
+const STORAGE_KEY_CORTES = 'sp_cortes_turno_v1';
+const STORAGE_KEY_HISTORIAL_OPS = 'sp_historial_ops_v1';
 
-/*
- * Detecta si la aplicación se está ejecutando en un entorno que
- * proporciona window.storage.
- */
-const hasArtifactStorage =
-  typeof window.storage !== 'undefined' &&
-  window.storage !== null;
-
-/*
- * Detecta si localStorage está disponible.
- *
- * Algunos navegadores pueden bloquearlo por configuración de
- * privacidad, modo incógnito o políticas corporativas. Por eso
- * se realiza una prueba real de escritura y eliminación.
- */
-function localStorageDisponible(){
-  try{
-    const clavePrueba = '__sp_prueba_storage__';
-
-    window.localStorage.setItem(clavePrueba, '1');
-    window.localStorage.removeItem(clavePrueba);
-
-    return true;
-  }catch(error){
-    console.warn(
-      'localStorage no está disponible:',
-      error
-    );
-
-    return false;
-  }
-}
-
-const hasLocalStorage = localStorageDisponible();
-
-/*
- * Recupera información guardada.
- *
- * Prioridad:
- * 1. window.storage
- * 2. localStorage
- * 3. null si no existe información
- */
 /* --- INICIO CONEXIÓN FIREBASE --- */
 const firebaseConfig = {
   apiKey: "AIzaSyABgoxELml0chya1waw0mFEeLX5oysfa2c",
@@ -109,49 +53,6 @@ async function storageSet(key, value){
     console.error(`Error guardando ${key} en Firebase:`, error);
     return false;
   }
-}
-
-/*
- * Guarda información de forma persistente.
- *
- * Cuando localStorage está disponible, también se guarda allí,
- * incluso si existe window.storage. Esto deja una copia local
- * para las siguientes aperturas en el mismo navegador.
- */
-async function storageSet(key, value){
-  let guardado = false;
-
-  if (hasArtifactStorage){
-    try{
-      await window.storage.set(key, value, false);
-      guardado = true;
-    }catch(error){
-      console.warn(
-        `No se pudo guardar ${key} en window.storage:`,
-        error
-      );
-    }
-  }
-
-  if (hasLocalStorage){
-    try{
-      window.localStorage.setItem(key, value);
-      guardado = true;
-    }catch(error){
-      console.error(
-        `No se pudo guardar ${key} en localStorage:`,
-        error
-      );
-    }
-  }
-
-  if (!guardado){
-    console.error(
-      `No existe almacenamiento disponible para guardar ${key}.`
-    );
-  }
-
-  return guardado;
 }
 
 function guardarProgramacion(){
