@@ -26,7 +26,7 @@ const firebaseConfig = {
   projectId: "mes-produccion-tocancipa",
   storageBucket: "mes-produccion-tocancipa.firebasestorage.app",
   messagingSenderId: "748547004390",
-  appId: "1:748547004390:web:4c4a27eeba8d0795592827"
+  appId: "1:748547004390:web:4c4a27eeba8d0795592827",
 };
 
 if (!firebase.apps.length) {
