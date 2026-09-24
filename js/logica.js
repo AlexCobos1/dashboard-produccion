@@ -118,15 +118,6 @@ function seedProgramacionSiVacio(){
   state.programacion = SEED_PROGRAMACION.map(p => ({...p}));
 }
 
-// Genera historial de ejemplo relativo a "ahora", para que el dashboard
-// nunca se vea vacío al abrir por primera vez, sin importar la hora del
-// día. Determina qué líneas ya "iniciaron" su turno (con la misma regla
-// de solo-hora-del-día que usa el motor real, tolerando cruce de
-// medianoche solo para decidir la semilla) y les crea 1-2 checkpoints
-// con un desempeño variado (algunas líneas van bien, otras no), usando
-// la MISMA función de negocio que el botón GRABAR para garantizar
-// resultados coherentes con el resto del sistema.
-
 function seedHistoricoSiVacio(){
   const ahora = new Date();
   const nowDec = toDecimalHour(ahora);
@@ -926,329 +917,135 @@ function calcularTiempoEfectivoTurno(opts){
 }
 
 function calcularCorteTurno(opts){
-
-  const datosTurno =
-    calcularTiempoEfectivoTurno(
-      opts
-    );
-
-  const fechaCorte =
-    new Date().toISOString();
-
-  const fechaOperativa =
-    obtenerFechaOperativa(
-      new Date()
-    );
-
+  const datosTurno = calcularTiempoEfectivoTurno(opts);
+  const fechaCorte = new Date().toISOString();
+  const fechaOperativa = obtenerFechaOperativa(new Date());
   const resultado = [];
 
-  const lineasUnicas =
-    [
-      ...new Set(
-        state.programacion.map(
-          x => x.linea
-        )
-      )
-    ];
+  const lineasUnicas = [...new Set(state.programacion.map(x => x.linea))];
 
   let totalProgramado = 0;
   let totalReal = 0;
 
   lineasUnicas.forEach(function(linea){
+    const programado = calcularProgramadoLineaCorte(linea, fechaCorte, opts);
 
-    const programado =
-      calcularProgramadoLineaCorte(
-        linea,
-        fechaCorte
-      );
+    const real = state.historico
+      .filter(r => r.linea === linea && r.fechaOperativa === fechaOperativa)
+      .reduce((total, r) => total + Number(r.cantidadHora || 0), 0);
 
-    const real =
-      state.historico
-        .filter(function(r){
+    const opActiva = state.programacion.find(
+      p => p.linea === linea && p.iniciada === true && p.cerrada !== true
+    );
 
-          if (
-            r.linea !== linea
-          ){
-            return false;
-          }
+    const uphActual = opActiva ? Number(opActiva.uph || 0) : 0;
+    const cumplimiento = programado > 0 ? real / programado : 0;
 
-          if (
-            r.fechaOperativa !==
-            fechaOperativa
-          ){
-            return false;
-          }
-
-          return true;
-
-        })
-        .reduce(
-          function(total, r){
-            return (
-              total +
-              Number(
-                r.cantidadHora || 0
-              )
-            );
-          },
-          0
-        );
-
-    const opActiva =
-      state.programacion.find(
-        p =>
-          p.linea === linea &&
-          p.iniciada === true &&
-          p.cerrada !== true
-      );
-
-    const uphActual =
-      opActiva
-        ? Number(
-            opActiva.uph || 0
-          )
-        : 0;
-
-    const cumplimiento =
-      programado > 0
-        ? real / programado
-        : 0;
-
-    totalProgramado +=
-      programado;
-
-    totalReal +=
-      real;
+    totalProgramado += programado;
+    totalReal += real;
 
     resultado.push({
-
       linea,
-
-      programado:
-        Math.round(
-          programado
-        ),
-
-      uph:
-        uphActual,
-
-      real:
-        Math.round(
-          real
-        ),
-
+      programado: Math.round(programado),
+      uph: uphActual,
+      real: Math.round(real),
       cumplimiento
-
     });
-
   });
 
-  const cumplimientoGlobal =
-    totalProgramado > 0
-      ? totalReal /
-        totalProgramado
-      : 0;
+  const cumplimientoGlobal = totalProgramado > 0 ? totalReal / totalProgramado : 0;
 
   return {
-
-    turno:
-      datosTurno.turno,
-
-    horasEfectivas:
-      datosTurno.horasEfectivas,
-
-    totalProgramado:
-      Math.round(
-        totalProgramado
-      ),
-
-    totalReal:
-      Math.round(
-        totalReal
-      ),
-
+    turno: datosTurno.turno,
+    horasEfectivas: datosTurno.horasEfectivas,
+    totalProgramado: Math.round(totalProgramado),
+    totalReal: Math.round(totalReal),
     cumplimientoGlobal,
-
-    detalle:
-      resultado
-
+    detalle: resultado
   };
-
 }
-function horasEntreFechas(
-  inicio,
-  fin
-){
 
-  const inicioFecha =
-    new Date(inicio);
-
-  const finFecha =
-    new Date(fin);
-
-  return (
-    finFecha -
-    inicioFecha
-  ) / 3600000;
-
+function horasEntreFechas(inicio, fin){
+  const inicioFecha = new Date(inicio);
+  const finFecha = new Date(fin);
+  return (finFecha - inicioFecha) / 3600000;
 }
-function calcularEsperadoLineaDesdeTramos(
-  linea,
-  fechaCorte
-){
 
-  const tramos =
-    state.historialOps.filter(
-      function(item){
-        return item.linea === linea;
-      }
-    );
-
+function calcularEsperadoLineaDesdeTramos(linea, fechaCorte){
+  const tramos = state.historialOps.filter(item => item.linea === linea);
   let esperado = 0;
-
   tramos.forEach(function(tramo){
-
-    if (!tramo.inicioReal){
-      return;
-    }
-
-    const inicio =
-      tramo.inicioReal;
-
-    const fin =
-      tramo.finReal ||
-      fechaCorte;
-
-    const horas =
-      horasEntreFechas(
-        inicio,
-        fin
-      );
-
-    esperado +=
-      horas *
-      Number(
-        tramo.uph || 0
-      );
-
+    if (!tramo.inicioReal) return;
+    const inicio = tramo.inicioReal;
+    const fin = tramo.finReal || fechaCorte;
+    const horas = horasEntreFechas(inicio, fin);
+    esperado += horas * Number(tramo.uph || 0);
   });
-
   return esperado;
-
 }
-function calcularProgramadoLineaCorte(
-  linea,
-  fechaCorte
-){
 
-  const corte =
-    new Date(fechaCorte);
-
-  const horaCorte =
-    corte.getHours() +
-    (corte.getMinutes() / 60);
+function calcularProgramadoLineaCorte(linea, fechaCorte, opts){
+  const corte = new Date(fechaCorte);
+  const horaCorte = corte.getHours() + (corte.getMinutes() / 60);
 
   let inicioTurno;
-
-  if (
-    horaCorte >= 6 &&
-    horaCorte < 14
-  ){
-    inicioTurno = 6;
-  }
-  else if (
-    horaCorte >= 14 &&
-    horaCorte < 22
-  ){
-    inicioTurno = 14;
-  }
-  else{
-    inicioTurno = 22;
-  }
+  if (horaCorte >= 6 && horaCorte < 14) inicioTurno = 6;
+  else if (horaCorte >= 14 && horaCorte < 22) inicioTurno = 14;
+  else inicioTurno = 22;
 
   let totalProgramado = 0;
+  let horasTotales = 0;
 
-  const tramosLinea =
-    state.historialOps.filter(
-      x => x.linea === linea
-    );
+  const tramosLinea = state.historialOps.filter(x => x.linea === linea);
 
   tramosLinea.forEach(function(tramo){
+    if (!tramo.inicioReal) return;
 
-    if (!tramo.inicioReal){
-      return;
+    const inicioReal = new Date(tramo.inicioReal);
+    const finReal = tramo.finReal ? new Date(tramo.finReal) : corte;
+
+    let inicioTramo = new Date(inicioReal);
+    let finTramo = new Date(finReal);
+
+    const inicioTurnoFecha = new Date(corte);
+    inicioTurnoFecha.setHours(inicioTurno, 0, 0, 0);
+
+    if (inicioTurno === 22 && horaCorte < 6){
+      inicioTurnoFecha.setDate(inicioTurnoFecha.getDate() - 1);
     }
 
-    const inicioReal =
-      new Date(
-        tramo.inicioReal
-      );
+    if (finTramo <= inicioTurnoFecha) return;
+    if (inicioTramo < inicioTurnoFecha) inicioTramo = inicioTurnoFecha;
 
-    const finReal =
-      tramo.finReal
-        ? new Date(
-            tramo.finReal
-          )
-        : corte;
+    const horas = (finTramo - inicioTramo) / 3600000;
+    if (horas <= 0) return;
 
-    let inicioTramo =
-      new Date(
-        inicioReal
-      );
-
-    let finTramo =
-      new Date(
-        finReal
-      );
-
-    const inicioTurnoFecha =
-      new Date(corte);
-
-    inicioTurnoFecha.setHours(
-      inicioTurno,
-      0,
-      0,
-      0
-    );
-
-    if (
-      inicioTurno === 22 &&
-      horaCorte < 6
-    ){
-      inicioTurnoFecha.setDate(
-        inicioTurnoFecha.getDate() - 1
-      );
-    }
-
-    if (
-      finTramo <= inicioTurnoFecha
-    ){
-      return;
-    }
-
-    if (
-      inicioTramo < inicioTurnoFecha
-    ){
-      inicioTramo =
-        inicioTurnoFecha;
-    }
-
-    const horas =
-      (finTramo - inicioTramo) /
-      3600000;
-
-    if (horas <= 0){
-      return;
-    }
-
-    totalProgramado +=
-      horas *
-      Number(
-        tramo.uph || 0
-      );
-
+    horasTotales += horas;
+    totalProgramado += horas * Number(tramo.uph || 0);
   });
 
-  return totalProgramado;
+  // ESCUDO ANTI-FANTASMAS
+  const horasTurnoTranscurridas = (corte - inicioTurnoFecha) / 3600000;
+  if (horasTotales > horasTurnoTranscurridas && horasTurnoTranscurridas > 0) {
+     totalProgramado = totalProgramado * (horasTurnoTranscurridas / horasTotales);
+     horasTotales = horasTurnoTranscurridas;
+  }
 
+  // DESCUENTOS DE PAUSA Y CENA APLICADOS A LA LÍNEA
+  if (opts && horasTotales > 0) {
+    let horasDescuento = 0;
+    if (opts.pausa) horasDescuento += (10 / 60);
+    if (opts.cena)  horasDescuento += (50 / 60);
+
+    if (horasDescuento > horasTotales) {
+      horasDescuento = horasTotales;
+    }
+
+    if (horasDescuento > 0) {
+       const uphPromedio = totalProgramado / horasTotales;
+       totalProgramado -= (horasDescuento * uphPromedio);
+    }
+  }
+
+  return Math.max(0, totalProgramado);
 }
