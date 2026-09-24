@@ -993,6 +993,13 @@ function calcularProgramadoLineaCorte(linea, fechaCorte, opts){
   else if (horaCorte >= 14 && horaCorte < 22) inicioTurno = 14;
   else inicioTurno = 22;
 
+  // CORRECCIÓN: La fecha de inicio del turno se calcula aquí afuera para que todo el código la pueda leer
+  const inicioTurnoFecha = new Date(corte);
+  inicioTurnoFecha.setHours(inicioTurno, 0, 0, 0);
+  if (inicioTurno === 22 && horaCorte < 6){
+    inicioTurnoFecha.setDate(inicioTurnoFecha.getDate() - 1);
+  }
+
   let totalProgramado = 0;
   let horasTotales = 0;
 
@@ -1007,15 +1014,8 @@ function calcularProgramadoLineaCorte(linea, fechaCorte, opts){
     let inicioTramo = new Date(inicioReal);
     let finTramo = new Date(finReal);
 
-    const inicioTurnoFecha = new Date(corte);
-    inicioTurnoFecha.setHours(inicioTurno, 0, 0, 0);
-
-    if (inicioTurno === 22 && horaCorte < 6){
-      inicioTurnoFecha.setDate(inicioTurnoFecha.getDate() - 1);
-    }
-
     if (finTramo <= inicioTurnoFecha) return;
-    if (inicioTramo < inicioTurnoFecha) inicioTramo = inicioTurnoFecha;
+    if (inicioTramo < inicioTurnoFecha) inicioTramo = new Date(inicioTurnoFecha);
 
     const horas = (finTramo - inicioTramo) / 3600000;
     if (horas <= 0) return;
@@ -1024,7 +1024,7 @@ function calcularProgramadoLineaCorte(linea, fechaCorte, opts){
     totalProgramado += horas * Number(tramo.uph || 0);
   });
 
-  // ESCUDO ANTI-FANTASMAS
+  // ESCUDO ANTI-FANTASMAS (Ahora sí puede leer la variable de inicioTurnoFecha)
   const horasTurnoTranscurridas = (corte - inicioTurnoFecha) / 3600000;
   if (horasTotales > horasTurnoTranscurridas && horasTurnoTranscurridas > 0) {
      totalProgramado = totalProgramado * (horasTurnoTranscurridas / horasTotales);
