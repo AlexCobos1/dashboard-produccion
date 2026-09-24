@@ -939,7 +939,7 @@ function calcularCorteTurno(opts){
     );
 
     const uphActual = opActiva ? Number(opActiva.uph || 0) : 0;
-    const cumplimiento = programado > 0 ? real / programado : 0;
+    const cumplimiento = programado > 0 ? real / programado : (real > 0 ? 1 : 0);
 
     totalProgramado += programado;
     totalReal += real;
