@@ -140,12 +140,11 @@ document
 /* --- INICIO NUEVO EVENTO: BOTÓN CALCULAR CORTE --- */
 document.getElementById('btnCalcularCorte').addEventListener('click', async function(){
   
-  // 1. Leer los checkboxes de la interfaz
+  // 1. Leer los checkboxes de la interfaz (Ya solo leemos la pausa)
   const aplicaPausa = document.getElementById('chkPausaActiva').checked;
-  const aplicaCena = document.getElementById('chkCena').checked;
 
-  // 2. Ejecutar la función matemática de logica.js
-  const resultadoCorte = calcularCorteTurno({ pausa: aplicaPausa, cena: aplicaCena });
+  // 2. Ejecutar la función matemática de logica.js (La cena ya es automática)
+  const resultadoCorte = calcularCorteTurno({ pausa: aplicaPausa });
 
   // 3. Generar el ID consecutivo correcto (Ej: CORTE-0005)
   let ultimoNumero = 0;
@@ -184,7 +183,7 @@ document.getElementById('btnCalcularCorte').addEventListener('click', async func
 
   // 10. Limpiar los checkboxes para el próximo corte
   document.getElementById('chkPausaActiva').checked = false;
-  document.getElementById('chkCena').checked = false;
+ 
 });
 /* --- FIN NUEVO EVENTO: BOTÓN CALCULAR CORTE --- */
 
@@ -578,7 +577,11 @@ function renderHorariosAlim() {
     { id: 'lv_t3', jornada: 'Lunes a Viernes', turno: 'Turno 3' },
     { id: 's_t1',  jornada: 'Sábados', turno: 'Turno 1' },
     { id: 's_t2',  jornada: 'Sábados', turno: 'Turno 2' },
-    { id: 's_t3',  jornada: 'Sábados', turno: 'Turno 3' }
+    { id: 's_t3',  jornada: 'Sábados', turno: 'Turno 3' },
+    // NUEVO: Domingos agregados
+    { id: 'd_t1',  jornada: 'Domingos', turno: 'Turno 1' },
+    { id: 'd_t2',  jornada: 'Domingos', turno: 'Turno 2' },
+    { id: 'd_t3',  jornada: 'Domingos', turno: 'Turno 3' }
   ];
 
   tbody.innerHTML = filas.map(f => `

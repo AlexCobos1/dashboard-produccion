@@ -208,10 +208,10 @@ function registrarInicioTramoOP(prog, fechaInicio){
    en la lista 'g1' o 'g2' de aquí abajo para que se les aplique el descuento
    automático de los 50 minutos.
 ----------------------------------------------------------------- */
+
 function calcularDescuentoAlimentacion(linea, fechaInicio, fechaFin) {
   if (!state.horariosAlim) return 0;
   
-  // CONFIGURACIÓN DE GRUPOS: Si compras una máquina nueva, añádela aquí
   const g1 = ['VERSAFILL', 'MANUAL 1', 'PKB 6', 'MANUAL 2', 'MANUAL 3', 'MRM'];
   const g2 = ['PKB 1', 'PKB 2', 'PKB 3', 'PKB 4', 'PKB 5', 'OMAS', 'PROBADORES'];
   
@@ -228,32 +228,36 @@ function calcularDescuentoAlimentacion(linea, fechaInicio, fechaFin) {
   }
 
   diasAComprobar.forEach(diaBase => {
-     if (diaBase.getDay() === 0) return; // Si es Domingo (0), no se aplican descansos automáticos
-     const pfx = diaBase.getDay() === 6 ? 's' : 'lv'; // 's' para sábados, 'lv' para Lunes a Viernes
+     
+     // Detectar automáticamente qué día de la semana es para aplicar su horario correspondiente
+     let pfx = 'lv'; // Lunes a Viernes
+     if (diaBase.getDay() === 6) pfx = 's'; // Sábado
+     else if (diaBase.getDay() === 0) pfx = 'd'; // Domingo
      
      ['t1', 't2', 't3'].forEach(t => {
         const horaStr = state.horariosAlim[`${pfx}_${t}_g${grupo}`];
+        
+        // REGLA INTELIGENTE: Si la casilla está vacía (no ingresaste hora), 
+        // ignora este turno y no descuenta nada (la cuenta sigue normal).
         if (!horaStr) return; 
         
         const [h, m] = horaStr.split(':').map(Number);
         const inicioPausa = new Date(diaBase);
         inicioPausa.setHours(h, m, 0, 0);
         
-        // Calcula si la hora de almuerzo cae dentro del tiempo trabajado por esta máquina
         const opcionesPausa = [inicioPausa, new Date(inicioPausa.getTime() + 86400000), new Date(inicioPausa.getTime() - 86400000)];
         opcionesPausa.forEach(pausaInic => {
-           const pausaFin = new Date(pausaInic.getTime() + (50 * 60000)); // 50 minutos exactos de duración del almuerzo
+           const pausaFin = new Date(pausaInic.getTime() + (50 * 60000)); // 50 min de duración
            const maxInicio = new Date(Math.max(fechaInicio, pausaInic));
            const minFin = new Date(Math.min(fechaFin, pausaFin));
            
            if (maxInicio < minFin) {
-              // Si hubo un cruce de tiempos, acumula los minutos para descontarlos del cálculo de UPH
               descuentoHoras += (minFin - maxInicio) / 3600000; 
            }
         });
      });
   });
-  return Math.min(descuentoHoras, 2.5); // Tope máximo de seguridad de horas a descontar
+  return Math.min(descuentoHoras, 2.5); 
 }
 
 
@@ -592,7 +596,6 @@ function calcularProgramadoLineaCorte(linea, fechaCorte, opts){
   else if (horaCorte >= 14 && horaCorte < 22) inicioTurno = 14;
   else inicioTurno = 22;
 
-  // Cálculo de la fecha exacta donde inició el turno
   const inicioTurnoFecha = new Date(corte);
   inicioTurnoFecha.setHours(inicioTurno, 0, 0, 0);
   if (inicioTurno === 22 && horaCorte < 6){
@@ -601,6 +604,7 @@ function calcularProgramadoLineaCorte(linea, fechaCorte, opts){
 
   let totalProgramado = 0;
   let horasTotales = 0;
+  let descuentoAlimentacionTotal = 0; // NUEVO: Acumulador inteligente
 
   const tramosLinea = state.historialOps.filter(x => x.linea === linea);
 
@@ -613,10 +617,7 @@ function calcularProgramadoLineaCorte(linea, fechaCorte, opts){
     let inicioTramo = new Date(inicioReal);
     let finTramo = new Date(finReal);
 
-    // Si la OP fue del turno anterior, se ignora por completo para este corte
     if (finTramo <= inicioTurnoFecha) return;
-    
-    // Corta exacto al inicio del turno para no arrastrar minutos del turno previo y pedir unidades de más
     if (inicioTramo < inicioTurnoFecha) inicioTramo = new Date(inicioTurnoFecha);
 
     const horas = (finTramo - inicioTramo) / 3600000;
@@ -624,28 +625,30 @@ function calcularProgramadoLineaCorte(linea, fechaCorte, opts){
 
     horasTotales += horas;
     totalProgramado += horas * Number(tramo.uph || 0);
+
+    // NUEVO: Calcula automáticamente si el turno cruzó con el horario de comida
+    descuentoAlimentacionTotal += calcularDescuentoAlimentacion(linea, inicioTramo, finTramo);
   });
 
-  // ESCUDO ANTI-FANTASMAS PARA EL CORTE
-  // Evita que las pruebas (o errores de operador) sumen horas físicas imposibles
+  // ESCUDO ANTI-FANTASMAS
   const horasTurnoTranscurridas = (corte - inicioTurnoFecha) / 3600000;
   if (horasTotales > horasTurnoTranscurridas && horasTurnoTranscurridas > 0) {
      totalProgramado = totalProgramado * (horasTurnoTranscurridas / horasTotales);
      horasTotales = horasTurnoTranscurridas;
   }
 
-  // DESCUENTOS DE PAUSA Y CENA APLICADOS A LA LÍNEA
-  if (opts && horasTotales > 0) {
-    let horasDescuento = 0;
-    if (opts.pausa) horasDescuento += (10 / 60);
-    if (opts.cena)  horasDescuento += (50 / 60);
+  // APLICAR DESCUENTOS (Alimentación automática + Pausa manual)
+  if (horasTotales > 0) {
+    let horasDescuento = descuentoAlimentacionTotal; // Toma el cálculo automático
+    
+    // La pausa activa sigue siendo con checkbox porque no tiene hora fija
+    if (opts && opts.pausa) horasDescuento += (10 / 60);
 
     if (horasDescuento > horasTotales) {
       horasDescuento = horasTotales;
     }
 
     if (horasDescuento > 0) {
-       // Calcular el UPH promedio para restarle exactamente esas unidades
        const uphPromedio = totalProgramado / horasTotales;
        totalProgramado -= (horasDescuento * uphPromedio);
     }
