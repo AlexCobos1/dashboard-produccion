@@ -567,6 +567,101 @@ async function verificarActualizaciones() {
 }
 /* --- FIN NUEVO CÓDIGO --- */
 
+/* --- INICIO NUEVA LÓGICA: HORARIOS DE ALIMENTACIÓN --- */
+function renderHorariosAlim() {
+  const tbody = document.getElementById('tbodyHorariosAlim');
+  if (!tbody) return;
+  
+  const filas = [
+    { id: 'lv_t1', jornada: 'Lunes a Viernes', turno: 'Turno 1' },
+    { id: 'lv_t2', jornada: 'Lunes a Viernes', turno: 'Turno 2' },
+    { id: 'lv_t3', jornada: 'Lunes a Viernes', turno: 'Turno 3' },
+    { id: 's_t1',  jornada: 'Sábados', turno: 'Turno 1' },
+    { id: 's_t2',  jornada: 'Sábados', turno: 'Turno 2' },
+    { id: 's_t3',  jornada: 'Sábados', turno: 'Turno 3' }
+  ];
+
+  tbody.innerHTML = filas.map(f => `
+    <tr>
+      <td class="strong">${f.jornada}</td>
+      <td>${f.turno}</td>
+      <td>
+        <input type="time" id="alim_${f.id}_g1" value="${state.horariosAlim[`${f.id}_g1`] || ''}" style="padding:6px 10px; border:1px solid var(--border); border-radius:4px; font-family:var(--font-display); outline:none;">
+      </td>
+      <td>
+        <input type="time" id="alim_${f.id}_g2" value="${state.horariosAlim[`${f.id}_g2`] || ''}" style="padding:6px 10px; border:1px solid var(--border); border-radius:4px; font-family:var(--font-display); outline:none;">
+      </td>
+    </tr>
+  `).join('');
+}
+
+document.getElementById('btnGuardarAlimentacion')?.addEventListener('click', async () => {
+   const inputs = document.querySelectorAll('input[type="time"][id^="alim_"]');
+   inputs.forEach(inp => {
+      const key = inp.id.replace('alim_', '');
+      state.horariosAlim[key] = inp.value;
+   });
+   await guardarHorariosAlim();
+   await modalExito('Horarios Guardados', 'El sistema descontará automáticamente 50 minutos del plan esperado en los horarios establecidos.');
+});
+/* --- FIN NUEVA LÓGICA --- */
+
+/* --- INICIO NUEVA LÓGICA: HORARIOS DE ALIMENTACIÓN --- */
+function renderHorariosAlim() {
+  const tbody = document.getElementById('tbodyHorariosAlim');
+  if (!tbody) return;
+  
+  const filas = [
+    { id: 'lv_t1', jornada: 'Lunes a Viernes', turno: 'Turno 1' },
+    { id: 'lv_t2', jornada: 'Lunes a Viernes', turno: 'Turno 2' },
+    { id: 'lv_t3', jornada: 'Lunes a Viernes', turno: 'Turno 3' },
+    { id: 's_t1',  jornada: 'Sábados', turno: 'Turno 1' },
+    { id: 's_t2',  jornada: 'Sábados', turno: 'Turno 2' },
+    { id: 's_t3',  jornada: 'Sábados', turno: 'Turno 3' }
+  ];
+
+  tbody.innerHTML = filas.map(f => `
+    <tr>
+      <td class="strong">${f.jornada}</td>
+      <td>${f.turno}</td>
+      <td>
+        <input type="time" id="alim_${f.id}_g1" value="${state.horariosAlim[`${f.id}_g1`] || ''}" style="padding:6px 10px; border:1px solid var(--border); border-radius:4px; font-family:var(--font-display); outline:none;">
+      </td>
+      <td>
+        <input type="time" id="alim_${f.id}_g2" value="${state.horariosAlim[`${f.id}_g2`] || ''}" style="padding:6px 10px; border:1px solid var(--border); border-radius:4px; font-family:var(--font-display); outline:none;">
+      </td>
+    </tr>
+  `).join('');
+}
+
+document.getElementById('btnGuardarAlimentacion')?.addEventListener('click', async () => {
+   // 1. Solicitar clave de analista
+   const claveIngresada = prompt('Ingrese la clave de analista para modificar los horarios de alimentación:');
+
+   // Si cancela el cuadro, no hacemos nada
+   if (claveIngresada === null) return;
+
+   // 2. Validar que la clave sea correcta
+   if (claveIngresada.trim() !== ANALISTA_PIN) {
+     await modalError('Acceso denegado', 'La clave de analista es incorrecta. No se guardaron los cambios.');
+     return;
+   }
+
+   // 3. Si la clave es correcta, procedemos a guardar
+   const inputs = document.querySelectorAll('input[type="time"][id^="alim_"]');
+   inputs.forEach(inp => {
+      const key = inp.id.replace('alim_', '');
+      state.horariosAlim[key] = inp.value;
+   });
+   
+   await guardarHorariosAlim();
+   await modalExito(
+     'Horarios Guardados', 
+     'El sistema descontará automáticamente 50 minutos del plan esperado en los horarios establecidos.'
+   );
+});
+/* --- FIN NUEVA LÓGICA --- */
+
 /* ---------------- Inicio de la aplicación ---------------- */
 async function init(){
   await cargarConfiguracion();          
@@ -576,6 +671,10 @@ async function init(){
 
   document.getElementById('fUsuario').value = state.usuario || '';
   renderTodo();
+  
+  // AQUÍ DIBUJAMOS LOS HORARIOS
+  renderHorariosAlim(); 
+  
   actualizarReloj();
   setInterval(actualizarReloj, 1000);
   
