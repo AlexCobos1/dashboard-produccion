@@ -226,52 +226,62 @@ function calcularDescuentoAlimentacion(linea, fechaInicio, fechaFin) {
   let descuentoHoras = 0;
   const pausasAplicadas = new Set();
   
-  const diasAComprobar = [new Date(fechaInicio.getFullYear(), fechaInicio.getMonth(), fechaInicio.getDate())];
-  const diaFinDate = new Date(fechaFin.getFullYear(), fechaFin.getMonth(), fechaFin.getDate());
-  
-  if (diasAComprobar[0].getTime() !== diaFinDate.getTime()) {
-     diasAComprobar.push(diaFinDate);
-  }
+  // 1. Determinar el Día Operativo (Cualquier hora antes de las 6:00 AM pertenece al día anterior)
+  const getDiaOperativo = (fecha) => {
+     const d = new Date(fecha);
+     if (d.getHours() < 6) d.setDate(d.getDate() - 1);
+     d.setHours(0,0,0,0);
+     return d;
+  };
 
-  diasAComprobar.forEach(diaBase => {
+  const diaOpInicio = getDiaOperativo(fechaInicio);
+  const diaOpFin = getDiaOperativo(fechaFin);
+  
+  const diasOperativos = [];
+  let currentOp = new Date(diaOpInicio);
+  while(currentOp <= diaOpFin) {
+     diasOperativos.push(new Date(currentOp));
+     currentOp.setDate(currentOp.getDate() + 1);
+  }
+  
+  diasOperativos.forEach(diaOp => {
+     const dayOfWeek = diaOp.getDay(); // 0: Dom, 1: Lun, ..., 5: Vie, 6: Sab
      
-     // Detectar día de la semana
+     // 2. Si el día operativo es Sábado, usamos 's', de lo contrario 'lv' (Domingo a Viernes)
      let pfx = 'lv'; 
-     if (diaBase.getDay() === 6) pfx = 's'; 
-     else if (diaBase.getDay() === 0) pfx = 'd'; 
+     if (dayOfWeek === 6) pfx = 's'; 
      
      ['t1', 't2', 't3'].forEach(t => {
-        
-        // REGLA DE EXCEPCIÓN: Si es Domingo (d) y Turno 3 (t3), usar la casilla de Lunes a Viernes (lv)
-        let prefijoBuscado = pfx;
-        if (pfx === 'd' && t === 't3') {
-            prefijoBuscado = 'lv';
-        }
-        
-        const horaStr = state.horariosAlim[`${prefijoBuscado}_${t}_g${grupo}`];
+        const horaStr = state.horariosAlim[`${pfx}_${t}_g${grupo}`];
         if (!horaStr) return; 
         
         const [h, m] = horaStr.split(':').map(Number);
-        const inicioPausa = new Date(diaBase);
+        
+        // 3. Reconstruir la hora real (Física) de la comida
+        const inicioPausa = new Date(diaOp);
+        
+        // Si es T3 y comen en la madrugada (Ej: 01:00 AM), ocurre físicamente al día siguiente
+        if (t === 't3' && h < 14) {
+           inicioPausa.setDate(inicioPausa.getDate() + 1);
+        }
+        
         inicioPausa.setHours(h, m, 0, 0);
+        const pausaId = inicioPausa.getTime();
         
-        const opcionesPausa = [inicioPausa, new Date(inicioPausa.getTime() + 86400000), new Date(inicioPausa.getTime() - 86400000)];
+        // 4. Escudo Anti-Duplicados
+        if (pausasAplicadas.has(pausaId)) return;
         
-        opcionesPausa.forEach(pausaInic => {
-           const pausaId = pausaInic.getTime(); 
-           if (pausasAplicadas.has(pausaId)) return;
-           
-           const pausaFin = new Date(pausaInic.getTime() + (50 * 60000));
-           const maxInicio = new Date(Math.max(fechaInicio, pausaInic));
-           const minFin = new Date(Math.min(fechaFin, pausaFin));
-           
-           if (maxInicio < minFin) {
-              descuentoHoras += (minFin - maxInicio) / 3600000; 
-              pausasAplicadas.add(pausaId);
-           }
-        });
+        const pausaFin = new Date(inicioPausa.getTime() + (50 * 60000));
+        const maxInicio = new Date(Math.max(fechaInicio, inicioPausa));
+        const minFin = new Date(Math.min(fechaFin, pausaFin));
+        
+        if (maxInicio < minFin) {
+           descuentoHoras += (minFin - maxInicio) / 3600000; 
+           pausasAplicadas.add(pausaId);
+        }
      });
   });
+  
   return Math.min(descuentoHoras, 2.5); 
 }
 
