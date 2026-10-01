@@ -130,17 +130,24 @@ async function inicializarEstado(){
   try{ state.historialOps = historialOpsRaw ? JSON.parse(historialOpsRaw) : []; }
   catch{ state.historialOps = []; }
 
-  // NUEVO: CARGAR HORARIOS DE ALIMENTACIÓN POR DEFECTO
   // Si en la nube no hay nada guardado, se aplicarán estos valores predeterminados (Ej: 11:10)
+  // NUEVO: CARGAR HORARIOS DE ALIMENTACIÓN POR DEFECTO
+  // Si en la nube no hay nada guardado, se aplicarán estos valores predeterminados
   try {
     state.horariosAlim = alimentacionRaw ? JSON.parse(alimentacionRaw) : {
       lv_t1_g1: '11:10', lv_t1_g2: '11:20', lv_t2_g1: '', lv_t2_g2: '', lv_t3_g1: '', lv_t3_g2: '',
-      s_t1_g1: '10:00',  s_t1_g2: '10:10', s_t2_g1: '',  s_t2_g2: '', s_t3_g1: '',  s_t3_g2: ''
+      s_t1_g1: '10:00',  s_t1_g2: '10:10', s_t2_g1: '',  s_t2_g2: '', s_t3_g1: '',  s_t3_g2: '',
+      // Domingos añadidos al estado inicial
+      d_t1_g1: '', d_t1_g2: '', d_t2_g1: '', d_t2_g2: '', d_t3_g1: '', d_t3_g2: ''
     };
   } catch {
-    state.horariosAlim = { lv_t1_g1: '11:10', lv_t1_g2: '11:20', s_t1_g1: '10:00', s_t1_g2: '10:10' };
+    // Respaldo de seguridad en caso de que el JSON de Firebase falle
+    state.horariosAlim = { 
+      lv_t1_g1: '11:10', lv_t1_g2: '11:20', 
+      s_t1_g1: '10:00', s_t1_g2: '10:10',
+      d_t1_g1: '', d_t1_g2: '' 
+    };
   }
-}
 
 /* ---------------- 5. UTILIDADES Y FORMATOS DE TEXTO ---------------- */
 const fmtInt   = n => Math.round(n||0).toLocaleString('es-CO');

@@ -566,7 +566,7 @@ async function verificarActualizaciones() {
 }
 /* --- FIN NUEVO CÓDIGO --- */
 
-/* --- INICIO NUEVA LÓGICA: HORARIOS DE ALIMENTACIÓN --- */
+/* --- INICIO NUEVA LÓGICA: HORARIOS DE ALIMENTACIÓN (UNIFICADA) --- */
 function renderHorariosAlim() {
   const tbody = document.getElementById('tbodyHorariosAlim');
   if (!tbody) return;
@@ -578,49 +578,10 @@ function renderHorariosAlim() {
     { id: 's_t1',  jornada: 'Sábados', turno: 'Turno 1' },
     { id: 's_t2',  jornada: 'Sábados', turno: 'Turno 2' },
     { id: 's_t3',  jornada: 'Sábados', turno: 'Turno 3' },
-    // NUEVO: Domingos agregados
+    // NUEVO: Domingos agregados correctamente para la interfaz
     { id: 'd_t1',  jornada: 'Domingos', turno: 'Turno 1' },
     { id: 'd_t2',  jornada: 'Domingos', turno: 'Turno 2' },
     { id: 'd_t3',  jornada: 'Domingos', turno: 'Turno 3' }
-  ];
-
-  tbody.innerHTML = filas.map(f => `
-    <tr>
-      <td class="strong">${f.jornada}</td>
-      <td>${f.turno}</td>
-      <td>
-        <input type="time" id="alim_${f.id}_g1" value="${state.horariosAlim[`${f.id}_g1`] || ''}" style="padding:6px 10px; border:1px solid var(--border); border-radius:4px; font-family:var(--font-display); outline:none;">
-      </td>
-      <td>
-        <input type="time" id="alim_${f.id}_g2" value="${state.horariosAlim[`${f.id}_g2`] || ''}" style="padding:6px 10px; border:1px solid var(--border); border-radius:4px; font-family:var(--font-display); outline:none;">
-      </td>
-    </tr>
-  `).join('');
-}
-
-document.getElementById('btnGuardarAlimentacion')?.addEventListener('click', async () => {
-   const inputs = document.querySelectorAll('input[type="time"][id^="alim_"]');
-   inputs.forEach(inp => {
-      const key = inp.id.replace('alim_', '');
-      state.horariosAlim[key] = inp.value;
-   });
-   await guardarHorariosAlim();
-   await modalExito('Horarios Guardados', 'El sistema descontará automáticamente 50 minutos del plan esperado en los horarios establecidos.');
-});
-/* --- FIN NUEVA LÓGICA --- */
-
-/* --- INICIO NUEVA LÓGICA: HORARIOS DE ALIMENTACIÓN --- */
-function renderHorariosAlim() {
-  const tbody = document.getElementById('tbodyHorariosAlim');
-  if (!tbody) return;
-  
-  const filas = [
-    { id: 'lv_t1', jornada: 'Lunes a Viernes', turno: 'Turno 1' },
-    { id: 'lv_t2', jornada: 'Lunes a Viernes', turno: 'Turno 2' },
-    { id: 'lv_t3', jornada: 'Lunes a Viernes', turno: 'Turno 3' },
-    { id: 's_t1',  jornada: 'Sábados', turno: 'Turno 1' },
-    { id: 's_t2',  jornada: 'Sábados', turno: 'Turno 2' },
-    { id: 's_t3',  jornada: 'Sábados', turno: 'Turno 3' }
   ];
 
   tbody.innerHTML = filas.map(f => `
