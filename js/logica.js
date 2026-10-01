@@ -2,23 +2,33 @@
    logica.js — Estado, almacenamiento y reglas de negocio
    ================================================================== */
 
-/* ---------------- Estado en memoria + almacenamiento ---------------- */
+/* ---------------- 1. ESTADO EN MEMORIA Y LLAVES DE GUARDADO ----------------
+   Aquí definimos las variables globales de la aplicación y los nombres
+   con los que se guardarán en la base de datos (Firebase).
+   Si cambias las llaves (STORAGE_KEY), empezarás con una base de datos en blanco.
+------------------------------------------------------------------------- */
 const state = {
   programacion: [],
   historico: [],
   historialOps: [],
   cortesTurno: [],
+  horariosAlim: {}, // NUEVO: Guarda los horarios de alimentación configurados desde la app
   usuario: '',
   totalUnidadesTeoricas: 0
 };
+
 const STORAGE_KEY_PROG = 'sp_programacion_v1';
 const STORAGE_KEY_HIST = 'sp_historico_v1';
 const STORAGE_KEY_USER = 'sp_usuario_v1';
 const STORAGE_KEY_TOTAL_TEORICO = 'sp_total_teorico_v1';
 const STORAGE_KEY_CORTES = 'sp_cortes_turno_v1';
 const STORAGE_KEY_HISTORIAL_OPS = 'sp_historial_ops_v1';
+const STORAGE_KEY_ALIMENTACION = 'sp_alimentacion_v1'; // NUEVO: Llave para guardar horarios
 
-/* --- INICIO CONEXIÓN FIREBASE --- */
+/* ---------------- 2. CONEXIÓN A FIREBASE ----------------
+   Estas son las credenciales de tu servidor en la nube.
+   Si algún día cambias de cuenta de Google/Firebase, debes reemplazar esto.
+------------------------------------------------------- */
 const firebaseConfig = {
   apiKey: "AIzaSyABgoxELml0chya1waw0mFEeLX5oysfa2c",
   authDomain: "mes-produccion-tocancipa.firebaseapp.com",
@@ -33,8 +43,8 @@ if (!firebase.apps.length) {
   firebase.initializeApp(firebaseConfig);
 }
 const db = firebase.database();
-/* --- FIN CONEXIÓN FIREBASE --- */
 
+/* ---------------- 3. FUNCIONES DE LECTURA Y ESCRITURA EN NUBE ---------------- */
 async function storageGet(key){
   try {
     const snapshot = await db.ref(key).once('value');
@@ -55,226 +65,84 @@ async function storageSet(key, value){
   }
 }
 
-function guardarProgramacion(){
-  return storageSet(
-    STORAGE_KEY_PROG,
-    JSON.stringify(state.programacion)
-  );
-}
-
-function guardarHistorico(){
-  return storageSet(
-    STORAGE_KEY_HIST,
-    JSON.stringify(state.historico)
-  );
-}
-
-function guardarUsuario(){
-  return storageSet(
-    STORAGE_KEY_USER,
-    state.usuario || ''
-  );
-}
-
-function guardarTotalTeorico(){
-  return storageSet(
-    STORAGE_KEY_TOTAL_TEORICO,
-    String(
-      state.totalUnidadesTeoricas || 0
-    )
-  );
-}
-
-function guardarCortesTurno(){
-
-
-  return storageSet(
-
-    STORAGE_KEY_CORTES,
-
-    JSON.stringify(
-      state.cortesTurno
-    )
-
-  );
-
-}
-
-function guardarHistorialOps(){
-
-  return storageSet(
-
-    STORAGE_KEY_HISTORIAL_OPS,
-
-    JSON.stringify(
-      state.historialOps
-    )
-
-  );
-
-}
+/* Funciones rápidas para guardar cada módulo por separado */
+function guardarProgramacion(){ return storageSet(STORAGE_KEY_PROG, JSON.stringify(state.programacion)); }
+function guardarHistorico(){ return storageSet(STORAGE_KEY_HIST, JSON.stringify(state.historico)); }
+function guardarUsuario(){ return storageSet(STORAGE_KEY_USER, state.usuario || ''); }
+function guardarTotalTeorico(){ return storageSet(STORAGE_KEY_TOTAL_TEORICO, String(state.totalUnidadesTeoricas || 0)); }
+function guardarCortesTurno(){ return storageSet(STORAGE_KEY_CORTES, JSON.stringify(state.cortesTurno)); }
+function guardarHistorialOps(){ return storageSet(STORAGE_KEY_HISTORIAL_OPS, JSON.stringify(state.historialOps)); }
+function guardarHorariosAlim(){ return storageSet(STORAGE_KEY_ALIMENTACION, JSON.stringify(state.horariosAlim)); } // NUEVO
 
 function seedProgramacionSiVacio(){
   state.programacion = SEED_PROGRAMACION.map(p => ({...p}));
 }
 
-function seedHistoricoSiVacio(){
-  const ahora = new Date();
-  const nowDec = toDecimalHour(ahora);
-  const PERFILES = [1.08, 0.97, 0.72, 1.01, 0.90, 0.65];
-
-  function transcurridoConWrap(horaInicio, duracion){
-    let t = nowDec - horaInicio;
-    if (t < 0) t += 24;
-    return t;
-  }
-
-  let candidatos = state.programacion.filter(p=>{
-    const t = transcurridoConWrap(p.horaInicio, p.duracion);
-    return t > 0.4 && t <= p.duracion;
-  });
-  if (!candidatos.length){
-    candidatos = [state.programacion.find(p=>p.linea==='PROBADORES') || state.programacion[0]];
-  }
-
-  candidatos.forEach((prog, idx)=>{
-    const factor = PERFILES[idx % PERFILES.length];
-    const transcurrido = transcurridoConWrap(prog.horaInicio, prog.duracion);
-    const checkpoints = transcurrido > 1.3 ? [transcurrido - 1, transcurrido] : [transcurrido];
-    checkpoints.forEach(tHrs=>{
-      const planTeorico = Math.min(prog.cantidad, Math.max(0, tHrs * prog.uph));
-      const acumulado = Math.max(0, Math.round(planTeorico * factor));
-      const ts = new Date(ahora.getTime() - (transcurrido - tHrs) * 3600 * 1000);
-      registrarProduccion({
-        linea: prog.linea, op: prog.op, acumuladoStr: String(acumulado),
-        usuario: 'alexi', observacion:'', timestamp: ts, forzarSobreproduccion:true, guardar:false
-      });
-    });
-  });
-
-  guardarHistorico();
-}
-
+/* ---------------- 4. INICIALIZACIÓN DEL SISTEMA ----------------
+   Esta función arranca cuando la página carga. Descarga todos los datos
+   de Firebase y los mete en la variable "state" para que la app sea rápida.
+----------------------------------------------------------------- */
 async function inicializarEstado(){
-const [
-  progRaw,
-  histRaw,
-  userRaw,
-  totalTeoricoRaw,
-  cortesRaw,
-  historialOpsRaw
+  const [
+    progRaw, histRaw, userRaw, totalTeoricoRaw, cortesRaw, historialOpsRaw, alimentacionRaw
+  ] = await Promise.all([
+    storageGet(STORAGE_KEY_PROG),
+    storageGet(STORAGE_KEY_HIST),
+    storageGet(STORAGE_KEY_USER),
+    storageGet(STORAGE_KEY_TOTAL_TEORICO),
+    storageGet(STORAGE_KEY_CORTES),
+    storageGet(STORAGE_KEY_HISTORIAL_OPS),
+    storageGet(STORAGE_KEY_ALIMENTACION) // NUEVO
+  ]);
 
-] = await Promise.all([
-  storageGet(STORAGE_KEY_PROG),
-  storageGet(STORAGE_KEY_HIST),
-  storageGet(STORAGE_KEY_USER),
-  storageGet(STORAGE_KEY_TOTAL_TEORICO),
-storageGet(STORAGE_KEY_CORTES),
-storageGet(STORAGE_KEY_HISTORIAL_OPS)
+  // Carga de Programación
+  try { state.programacion = progRaw ? JSON.parse(progRaw) : []; } 
+  catch (error) { state.programacion = []; }
 
-]);
+  // Carga de Histórico
+  try { state.historico = histRaw ? JSON.parse(histRaw) : []; } 
+  catch (error) { state.historico = []; }
 
-
-  // Cargar Programación guardada.
-  // Si no existe, comenzar con un array vacío.
-  try {
-    state.programacion =
-      progRaw !== null && progRaw !== undefined
-        ? JSON.parse(progRaw)
-        : [];
-  } catch (error) {
-    console.error(
-      'No se pudo leer la Programación guardada:',
-      error
-    );
-
-    state.programacion = [];
-  }
-
-  // Cargar Histórico guardado.
-  // Si no existe, comenzar con un array vacío.
-  try {
-    state.historico =
-      histRaw !== null && histRaw !== undefined
-        ? JSON.parse(histRaw)
-        : [];
-  } catch (error) {
-    console.error(
-      'No se pudo leer el Histórico guardado:',
-      error
-    );
-
-    state.historico = [];
-  }
-
-  // Asegurar que Programación sea siempre un array.
-  // Un array vacío es válido y no debe llenarse con datos demo.
+  // Validaciones de seguridad para evitar errores si la base de datos está vacía
   if (!Array.isArray(state.programacion)){
     state.programacion = [];
     await guardarProgramacion();
   }
-state.programacion.forEach(function(op){
+  state.programacion.forEach(function(op){
+    if (typeof op.cerrada === 'undefined') op.cerrada = false;
+    if (typeof op.iniciada === 'undefined') op.iniciada = false;
+    if (typeof op.fechaCierre === 'undefined') op.fechaCierre = null;
+    if (typeof op.cerradaPor === 'undefined') op.cerradaPor = null;
+  });
 
-  if (typeof op.cerrada === 'undefined'){
-    op.cerrada = false;
-  }
-if (typeof op.iniciada === 'undefined'){
-  op.iniciada = false;
-}
-
-  if (typeof op.fechaCierre === 'undefined'){
-    op.fechaCierre = null;
-  }
-
-  if (typeof op.cerradaPor === 'undefined'){
-    op.cerradaPor = null;
-  }
-
-});
-  // Asegurar que Histórico sea siempre un array.
-  // Un array vacío es válido y no debe llenarse con datos demo.
   if (!Array.isArray(state.historico)){
     state.historico = [];
     await guardarHistorico();
   }
 
-
-  // Recuperar el último usuario utilizado.
   state.usuario = userRaw || '';
-state.totalUnidadesTeoricas =
-  Number(totalTeoricoRaw || 0);
-try{
+  state.totalUnidadesTeoricas = Number(totalTeoricoRaw || 0);
 
-  state.cortesTurno =
-    cortesRaw
-      ? JSON.parse(cortesRaw)
-      : [];
+  // Carga de Cortes de Turno y Tiempos Físicos
+  try{ state.cortesTurno = cortesRaw ? JSON.parse(cortesRaw) : []; }
+  catch{ state.cortesTurno = []; }
 
+  try{ state.historialOps = historialOpsRaw ? JSON.parse(historialOpsRaw) : []; }
+  catch{ state.historialOps = []; }
+
+  // NUEVO: CARGAR HORARIOS DE ALIMENTACIÓN POR DEFECTO
+  // Si en la nube no hay nada guardado, se aplicarán estos valores predeterminados (Ej: 11:10)
+  try {
+    state.horariosAlim = alimentacionRaw ? JSON.parse(alimentacionRaw) : {
+      lv_t1_g1: '11:10', lv_t1_g2: '11:20', lv_t2_g1: '', lv_t2_g2: '', lv_t3_g1: '', lv_t3_g2: '',
+      s_t1_g1: '10:00',  s_t1_g2: '10:10', s_t2_g1: '',  s_t2_g2: '', s_t3_g1: '',  s_t3_g2: ''
+    };
+  } catch {
+    state.horariosAlim = { lv_t1_g1: '11:10', lv_t1_g2: '11:20', s_t1_g1: '10:00', s_t1_g2: '10:10' };
+  }
 }
-catch{
 
-  state.cortesTurno = [];
-
-}
-
-try{
-
-  state.historialOps =
-    historialOpsRaw
-      ? JSON.parse(
-          historialOpsRaw
-        )
-      : [];
-
-}
-catch{
-
-  state.historialOps = [];
-
- }
- }
-
-/* ---------------- Utilidades de formato y fecha/hora ---------------- */
+/* ---------------- 5. UTILIDADES Y FORMATOS DE TEXTO ---------------- */
 const fmtInt   = n => Math.round(n||0).toLocaleString('es-CO');
 const fmtDec   = (n,d=1) => (n||0).toLocaleString('es-CO', {minimumFractionDigits:d, maximumFractionDigits:d});
 const fmtPct0  = n => Math.round((n||0)*100) + '%';
@@ -294,18 +162,14 @@ function fechaISO(date){
   return `${y}-${m}-${d}`;
 }
 function obtenerFechaOperativa(fechaHora){
-
   const fecha = new Date(fechaHora);
-
+  // Las horas de 00:00 a 13:59 pertenecen operativamente al día anterior según tu regla.
+  // Puedes ajustar el "14" si el cambio de día operativo cambia de horario.
   if (fecha.getHours() < 14){
-    fecha.setDate(
-      fecha.getDate() - 1
-    );
+    fecha.setDate(fecha.getDate() - 1);
   }
-
   return fechaISO(fecha);
 }
-
 function fechaTexto(iso){
   const [y,m,d] = iso.split('-');
   return `${d}/${m}/${y}`;
@@ -321,292 +185,213 @@ function buscarProgramacion(linea, op){
   const o = (op==null? '': String(op)).trim();
   return state.programacion.find(p => p.linea.trim().toUpperCase()===l && String(p.op).trim()===o) || null;
 }
-function registrarInicioTramoOP(
-  prog,
-  fechaInicio
-){
 
-  const existe =
-    state.historialOps.find(
-      function(item){
-
-        return (
-
-          item.linea ===
-            prog.linea
-
-          &&
-
-          item.op ===
-            prog.op
-
-          &&
-
-          item.finReal ===
-            null
-
-        );
-
-      }
-    );
-
-  if (existe){
-    return;
-  }
+function registrarInicioTramoOP(prog, fechaInicio){
+  const existe = state.historialOps.find(function(item){
+    return (item.linea === prog.linea && item.op === prog.op && item.finReal === null);
+  });
+  if (existe) return;
 
   state.historialOps.push({
-
-    linea:
-      prog.linea,
-
-    op:
-      prog.op,
-
-    uph:
-      prog.uph,
-
-    inicioReal:
-      fechaInicio,
-
-    finReal:
-      null
-
+    linea: prog.linea,
+    op: prog.op,
+    uph: prog.uph,
+    inicioReal: fechaInicio,
+    finReal: null
   });
-
   guardarHistorialOps();
-
 }
-/* ---------------- Lógica de negocio (macro GrabarProduccion) ----------------
-   Réplica exacta de las validaciones y cálculos del módulo VBA
-   "ModuloProduccion.GrabarProduccion" del archivo original:
-   - validaciones de línea / OP / acumulado
-   - búsqueda de la OP en Programación
-   - confirmación de sobreproducción
-   - cantidadHora, planAcumulado, diferencia, cumplimiento, estado
-------------------------------------------------------------------- */
 
+
+/* ---------------- 6. LÓGICA DE ALIMENTACIÓN (NUEVO) ----------------
+   Si en el futuro añades más líneas a la planta, debes agregarlas
+   en la lista 'g1' o 'g2' de aquí abajo para que se les aplique el descuento
+   automático de los 50 minutos.
+----------------------------------------------------------------- */
+function calcularDescuentoAlimentacion(linea, fechaInicio, fechaFin) {
+  if (!state.horariosAlim) return 0;
+  
+  // CONFIGURACIÓN DE GRUPOS: Si compras una máquina nueva, añádela aquí
+  const g1 = ['VERSAFILL', 'MANUAL 1', 'PKB 6', 'MANUAL 2', 'MANUAL 3', 'MRM'];
+  const g2 = ['PKB 1', 'PKB 2', 'PKB 3', 'PKB 4', 'PKB 5', 'OMAS', 'PROBADORES'];
+  
+  const lin = linea.trim().toUpperCase();
+  let grupo = g1.includes(lin) ? 1 : (g2.includes(lin) ? 2 : 0);
+  if (grupo === 0) return 0; 
+  
+  let descuentoHoras = 0;
+  const diasAComprobar = [new Date(fechaInicio.getFullYear(), fechaInicio.getMonth(), fechaInicio.getDate())];
+  const diaFinDate = new Date(fechaFin.getFullYear(), fechaFin.getMonth(), fechaFin.getDate());
+  
+  if (diasAComprobar[0].getTime() !== diaFinDate.getTime()) {
+     diasAComprobar.push(diaFinDate);
+  }
+
+  diasAComprobar.forEach(diaBase => {
+     if (diaBase.getDay() === 0) return; // Si es Domingo (0), no se aplican descansos automáticos
+     const pfx = diaBase.getDay() === 6 ? 's' : 'lv'; // 's' para sábados, 'lv' para Lunes a Viernes
+     
+     ['t1', 't2', 't3'].forEach(t => {
+        const horaStr = state.horariosAlim[`${pfx}_${t}_g${grupo}`];
+        if (!horaStr) return; 
+        
+        const [h, m] = horaStr.split(':').map(Number);
+        const inicioPausa = new Date(diaBase);
+        inicioPausa.setHours(h, m, 0, 0);
+        
+        // Calcula si la hora de almuerzo cae dentro del tiempo trabajado por esta máquina
+        const opcionesPausa = [inicioPausa, new Date(inicioPausa.getTime() + 86400000), new Date(inicioPausa.getTime() - 86400000)];
+        opcionesPausa.forEach(pausaInic => {
+           const pausaFin = new Date(pausaInic.getTime() + (50 * 60000)); // 50 minutos exactos de duración del almuerzo
+           const maxInicio = new Date(Math.max(fechaInicio, pausaInic));
+           const minFin = new Date(Math.min(fechaFin, pausaFin));
+           
+           if (maxInicio < minFin) {
+              // Si hubo un cruce de tiempos, acumula los minutos para descontarlos del cálculo de UPH
+              descuentoHoras += (minFin - maxInicio) / 3600000; 
+           }
+        });
+     });
+  });
+  return Math.min(descuentoHoras, 2.5); // Tope máximo de seguridad de horas a descontar
+}
+
+
+/* ---------------- 7. REGISTRO DE PRODUCCIÓN HORA A HORA (CORE) ----------------
+   Esta es la función más importante. Recibe las unidades, calcula los acumulados,
+   determina el cumplimiento y le descuenta los tiempos de alimentación.
+--------------------------------------------------------------------------------- */
 function registrarProduccion(opts){
   const { linea: lineaIn, op: opIn, acumuladoStr, usuario, observacion,
           timestamp, forzarSobreproduccion, guardar = true } = opts;
 
   const linea = (lineaIn || '').trim();
-  if (!linea){
-    return { ok:false, icon:'warning', title:'Dato obligatorio', message:'Seleccione una línea.' };
-  }
+  if (!linea) return { ok:false, icon:'warning', title:'Dato obligatorio', message:'Seleccione una línea.' };
+  
   const op = (opIn == null ? '' : String(opIn)).trim();
-  if (!op){
-    return { ok:false, icon:'warning', title:'Dato obligatorio', message:'Seleccione o escriba una OP.' };
-  }
-const cantidadHora =
-  Number(acumuladoStr);
+  if (!op) return { ok:false, icon:'warning', title:'Dato obligatorio', message:'Seleccione o escriba una OP.' };
+  
+  const cantidadHora = Number(acumuladoStr);
 
-if (
-  acumuladoStr === '' ||
-  acumuladoStr == null ||
-  Number.isNaN(cantidadHora)
-){
-  return {
-  ok:false,
-  icon:'warning',
-  title:'Dato incorrecto',
-  message:'Digite las unidades producidas en la hora.'
-};
+  if (acumuladoStr === '' || acumuladoStr == null || Number.isNaN(cantidadHora)){
+    return { ok:false, icon:'warning', title:'Dato incorrecto', message:'Digite las unidades producidas en la hora.' };
   }
+  
   if (cantidadHora < 0){
     return { ok:false, icon:'warning', title:'Dato incorrecto', message:'Las unidades producidas en la hora no pueden ser negativas.' };
   }
- const ahora = timestamp || new Date();
- const prog = buscarProgramacion(linea, op);
+  
+  const ahora = timestamp || new Date();
+  const prog = buscarProgramacion(linea, op);
 
-if (!prog){
-  return {
-    ok:false,
-    icon:'error',
-    title:'OP no válida',
-    message:`La OP ${op} no pertenece a la línea ${linea} o no está disponible en Programación.`
-  };
-}
-
-if (prog.cerrada === true){
-  return {
-    ok:false,
-    icon:'warning',
-    title:'OP cerrada',
-    message:
-      `La OP ${op} fue cerrada y ya no admite registros.\n\n` +
-      `Solicite reapertura al Analista si necesita continuar.`
-  };
-}
-
-/* --- INICIO NUEVO CÓDIGO: CANDADO PARA OP NO INICIADA --- */
-if (prog.iniciada !== true) {
-  return {
-    ok:false,
-    icon:'warning',
-    title:'OP no iniciada',
-    message:`La OP ${op} aún no se ha iniciado.\n\nDebe presionar el botón "▶ INICIAR OP" antes de poder registrar producción.`
-  };
-}
-/* --- FIN NUEVO CÓDIGO --- */
-
-registrarInicioTramoOP(
-  prog,
-
-  ahora.toISOString()
-
-);
-
-// Último acumulado de esa OP
-const previos = state.historico
-  .filter(
-    r =>
-      r.linea.toUpperCase() === linea.toUpperCase() &&
-      String(r.op).trim() === op
-  )
-  .sort(
-    (a,b) => a.ts.localeCompare(b.ts)
-  );
-
-const acumuladoAnterior =
-  previos.length
-    ? previos[previos.length - 1].acumulado
-    : 0;
-
-const acumuladoNum =
-  acumuladoAnterior +
-  cantidadHora;
-
-if (
-  prog.cantidad > 0 &&
-  acumuladoNum > prog.cantidad &&
-  !forzarSobreproduccion
-){
-  return {
-    ok:'confirm',
-    icon:'warning',
-    title:'Confirmar sobreproducción',
-    message:`El acumulado supera la cantidad programada de ${fmtInt(prog.cantidad)} unidades.\n¿Desea guardar el registro?`,
-    pending:{
-      linea,
-      op,
-      acumuladoStr,
-      usuario,
-      observacion,
-      timestamp,
-      guardar
-    }
-  };
-}
-   
-
-
-const nowDec = toDecimalHour(ahora);
-
-let planAcumulado = 0;
-
-if (prog.uph > 0) {
-      let horasTranscurridas = 0;
-      
-      // 1. Buscamos TODOS los tiempos reales en los que esta OP ha estado iniciada
-      const tramosOp = state.historialOps.filter(
-        item => item.linea === linea && String(item.op) === op
-      );
-
-      if (tramosOp.length > 0) {
-        tramosOp.forEach(tramo => {
-          if (tramo.inicioReal) {
-            const inicio = new Date(tramo.inicioReal);
-            const fin = tramo.finReal ? new Date(tramo.finReal) : ahora;
-            // Sumamos el tiempo real de producción en horas (milisegundos a horas)
-            horasTranscurridas += (fin - inicio) / 3600000;
-          }
-        });
-      } else {
-        // 2. Respaldo (fallback) por si hay una OP antigua sin registro de inicioReal
-        horasTranscurridas = nowDec - prog.horaInicio;
-        if (String(prog.turno || '').toUpperCase() === 'T3' && horasTranscurridas < 0) {
-          horasTranscurridas += 24;
-        }
-      }
-
-      if (horasTranscurridas < 0) horasTranscurridas = 0;
-
-      // 3. No exigir más unidades del tope máximo de duración
-      if (Number.isFinite(Number(prog.duracion)) && Number(prog.duracion) > 0) {
-        horasTranscurridas = Math.min(horasTranscurridas, Number(prog.duracion));
-      }
-
-      // 4. Plan exacto calculado con cronómetro real
-      planAcumulado = horasTranscurridas * Number(prog.uph);
-  /*
-   * El plan acumulado nunca debe superar la cantidad
-   * total programada de la OP.
-   */
-  if (
-    Number(prog.cantidad) > 0 &&
-    planAcumulado > Number(prog.cantidad)
-  ){
-    planAcumulado = Number(prog.cantidad);
+  if (!prog) {
+    return { ok:false, icon:'error', title:'OP no válida', message:`La OP ${op} no pertenece a la línea ${linea} o no está disponible.` };
   }
-}
+  if (prog.cerrada === true) {
+    return { ok:false, icon:'warning', title:'OP cerrada', message:`La OP ${op} fue cerrada y ya no admite registros.` };
+  }
+  if (prog.iniciada !== true) {
+    return { ok:false, icon:'warning', title:'OP no iniciada', message:`La OP ${op} aún no se ha iniciado. Presione "INICIAR OP".` };
+  }
+
+  registrarInicioTramoOP(prog, ahora.toISOString());
+
+  // Cálculos de acumulado anterior sumando la hora actual
+  const previos = state.historico
+    .filter(r => r.linea.toUpperCase() === linea.toUpperCase() && String(r.op).trim() === op)
+    .sort((a,b) => a.ts.localeCompare(b.ts));
+
+  const acumuladoAnterior = previos.length ? previos[previos.length - 1].acumulado : 0;
+  const acumuladoNum = acumuladoAnterior + cantidadHora;
+
+  // Alerta de sobreproducción
+  if (prog.cantidad > 0 && acumuladoNum > prog.cantidad && !forzarSobreproduccion){
+    return {
+      ok:'confirm', icon:'warning', title:'Confirmar sobreproducción',
+      message:`El acumulado supera la cantidad programada de ${fmtInt(prog.cantidad)} unidades.\n¿Desea guardar el registro?`,
+      pending:{ linea, op, acumuladoStr, usuario, observacion, timestamp, guardar }
+    };
+  }
+
+  const nowDec = toDecimalHour(ahora);
+  let planAcumulado = 0;
+
+  // CÁLCULO MATEMÁTICO DEL PLAN ESPERADO (Descuenta el almuerzo automáticamente)
+  if (prog.uph > 0) {
+    let horasTranscurridas = 0;
+    let descuentoAlimentacion = 0; // Se inicializa el escudo de almuerzo
+    
+    // 1. Buscamos TODOS los tiempos reales del cronómetro de esta OP
+    const tramosOp = state.historialOps.filter(
+      item => item.linea === linea && String(item.op) === op
+    );
+
+    if (tramosOp.length > 0) {
+      tramosOp.forEach(tramo => {
+        if (tramo.inicioReal) {
+          const inicio = new Date(tramo.inicioReal);
+          const fin = tramo.finReal ? new Date(tramo.finReal) : ahora;
+          
+          horasTranscurridas += (fin - inicio) / 3600000;
+          // REGLA: Si la máquina estuvo encendida durante la hora de almuerzo, calculamos cuántos minutos se le descuentan
+          descuentoAlimentacion += calcularDescuentoAlimentacion(linea, inicio, fin);
+        }
+      });
+    } else {
+      // Respaldo por si hay una OP antigua y no usaron el botón de INICIAR OP
+      horasTranscurridas = nowDec - prog.horaInicio;
+      if (String(prog.turno || '').toUpperCase() === 'T3' && horasTranscurridas < 0) {
+        horasTranscurridas += 24;
+      }
+    }
+
+    // APLICAR ESCUDO DE ALIMENTACIÓN AL RELOJ FISICO
+    horasTranscurridas -= descuentoAlimentacion;
+    if (horasTranscurridas < 0) horasTranscurridas = 0;
+
+    // No exigir más horas de las que dura la OP en su totalidad
+    if (Number.isFinite(Number(prog.duracion)) && Number(prog.duracion) > 0) {
+      horasTranscurridas = Math.min(horasTranscurridas, Number(prog.duracion));
+    }
+
+    // Cálculo final: Tiempo físico trabajado * UPH esperado
+    planAcumulado = horasTranscurridas * Number(prog.uph);
+    
+    if (Number(prog.cantidad) > 0 && planAcumulado > Number(prog.cantidad)){
+      planAcumulado = Number(prog.cantidad); // Nunca pedir más del total programado
+    }
+  }
 
   const diferencia = acumuladoNum - planAcumulado;
   const cumplimiento = planAcumulado > 0 ? acumuladoNum / planAcumulado : 0;
   let estado = 'PENDIENTE';
 
-if (planAcumulado > 0){
+  if (planAcumulado > 0){
+    estado = cumplimiento >= 1 ? 'ADELANTADO' : (cumplimiento >= 0.95 ? 'EN TIEMPO' : 'ATRASADO');
+  }
 
-  estado =
-    cumplimiento >= 1
-      ? 'ADELANTADO'
-      : (
-          cumplimiento >= 0.95
-            ? 'EN TIEMPO'
-            : 'ATRASADO'
-        );
+  // Cálculo del "Semáforo" de la hora (rojo, verde, azul)
+  const objetivoHora = Number(prog.uph);
+  let estadoHora = 'NO CUMPLE';
+  let colorEstadoHora = 'rojo';
 
-}
+  // Tolerancia: si hacen hasta 5 unidades más del UPH, es verde. Si hacen más de 5 extras, es azul (Supera).
+  // Puedes cambiar el "5" en estas líneas si quieres darle mayor tolerancia de error a la planta.
+  if (cantidadHora >= objetivoHora && cantidadHora <= (objetivoHora + 5)){
+    estadoHora = 'CUMPLE';
+    colorEstadoHora = 'verde';
+  }
+  else if (cantidadHora > (objetivoHora + 5)){
+    estadoHora = 'SUPERA';
+    colorEstadoHora = 'azul';
+  }
 
-const objetivoHora =
-  Number(prog.uph);
-
-let estadoHora = 'NO CUMPLE';
-
-let colorEstadoHora = 'rojo';
-
-if (
-  cantidadHora >= objetivoHora &&
-  cantidadHora <= (objetivoHora + 5)
-){
-
-  estadoHora = 'CUMPLE';
-  colorEstadoHora = 'verde';
-
-}
-else if (
-  cantidadHora > (objetivoHora + 5)
-){
-
-  estadoHora = 'SUPERA';
-  colorEstadoHora = 'azul';
-
-}
   const record = {
-    id: uid(), ts: ahora.toISOString(), fecha: fechaISO(ahora), fechaOperativa:
-  obtenerFechaOperativa(
-    ahora
-  ), hora: horaTexto(ahora),
+    id: uid(), ts: ahora.toISOString(), fecha: fechaISO(ahora), fechaOperativa: obtenerFechaOperativa(ahora), hora: horaTexto(ahora),
     linea, op, acumulado: acumuladoNum,
     usuario: (usuario || '').trim() || 'Operador',
     observacion: (observacion || '').trim(),
-    cantidadHora,
-    planAcumulado,
-    diferencia,
-    cumplimiento,
-    estado,
-    estadoHora,
-    colorEstadoHora,
-    uphPlan: prog.uph, producto: prog.producto
+    cantidadHora, planAcumulado, diferencia, cumplimiento, estado, estadoHora, colorEstadoHora, uphPlan: prog.uph, producto: prog.producto
   };
 
   state.historico.push(record);
@@ -615,89 +400,37 @@ else if (
   return { ok:true, record, cantidadHora, cumplimiento };
 }
 
-/* ---------------- Agregaciones del Dashboard (hoja DASHBOARD) ---------------- */
-
-
-
-
+/* ---------------- 8. AGREGACIONES DEL DASHBOARD ---------------- */
 function computeDashboard(){
-  const fecha =
-  obtenerFechaOperativa(
-    new Date()
-  );
-
-const regsHoy =
-  state.historico.filter(
-    function(r){
-
-      return (
-        obtenerFechaOperativa(
-          r.ts
-        ) === fecha
-      );
-
-    }
-  );
+  const fecha = obtenerFechaOperativa(new Date());
+  const regsHoy = state.historico.filter(r => obtenerFechaOperativa(r.ts) === fecha);
 
   const unidadesProducidas = regsHoy.reduce((s,r)=>s+r.cantidadHora, 0);
- const planDelDia =
-  Number(state.totalUnidadesTeoricas) > 0
-    ? Number(state.totalUnidadesTeoricas)
-    : state.programacion.reduce(
-        (total, programa) => {
-          const cantidad =
-            Number(programa.cantidad);
-
-          return total +
-            (
-              Number.isFinite(cantidad)
-                ? cantidad
-                : 0
-            );
-        },
-        0
-      );
+  const planDelDia = Number(state.totalUnidadesTeoricas) > 0 
+    ? Number(state.totalUnidadesTeoricas) 
+    : state.programacion.reduce((total, programa) => {
+        const cantidad = Number(programa.cantidad);
+        return total + (Number.isFinite(cantidad) ? cantidad : 0);
+      }, 0);
+      
   const cumplimientoGlobal = planDelDia > 0 ? unidadesProducidas/planDelDia : 0;
   const registros = regsHoy.filter(r=>r.op).length;
- const ultimosEstadosPorLinea =
-  {};
+  
+  const ultimosEstadosPorLinea = {};
+  regsHoy.forEach(registro => {
+    const linea = registro.linea;
+    if (!ultimosEstadosPorLinea[linea] || registro.ts > ultimosEstadosPorLinea[linea].ts){
+      ultimosEstadosPorLinea[linea] = registro;
+    }
+  });
 
-regsHoy.forEach(function(registro){
-
-  const linea =
-    registro.linea;
-
-  if (
-    !ultimosEstadosPorLinea[linea] ||
-    registro.ts >
-    ultimosEstadosPorLinea[linea].ts
-  ){
-
-    ultimosEstadosPorLinea[linea] =
-      registro;
-
-  }
-
-});
-
-const lineasNoCumplen =
-  Object.values(
-    ultimosEstadosPorLinea
-  )
-  .filter(
-    registro =>
-      registro.estadoHora ===
-      'NO CUMPLE'
-  )
-  .length;
+  const lineasNoCumplen = Object.values(ultimosEstadosPorLinea).filter(registro => registro.estadoHora === 'NO CUMPLE').length;
   const lineasActivas = new Set(regsHoy.filter(r=>r.cantidadHora>0).map(r=>r.linea)).size;
 
-  const porLinea = LINEAS.map(linea=>{
+  const porLinea = LINEAS.map(linea => {
     const regs = regsHoy.filter(r=>r.linea===linea);
     const unidades = regs.reduce((s,r)=>s+r.cantidadHora, 0);
     
-    // CORRECCIÓN: No sumar los acumulados a ciegas. 
-    // Tomamos el último plan esperado válido de cada OP activa hoy en la línea.
     let plan = 0;
     const opsDelDia = [...new Set(regs.map(r => String(r.op)))];
     opsDelDia.forEach(opName => {
@@ -717,203 +450,80 @@ const lineasNoCumplen =
       const ultimo = regs.slice().sort((a,b)=>a.ts.localeCompare(b.ts)).pop();
       opActiva = ultimo.op;
       uphPlan = ultimo.uphPlan;
-      
-      /* --- INICIO CÓDIGO CORREGIDO: UPH REAL = ÚLTIMO REGISTRO --- */
       uphReal = ultimo.cantidadHora;
-      /* --- FIN CÓDIGO CORREGIDO --- */
     }
-   let estado = 'SIN REGISTRO';
+    
+    let estado = 'SIN REGISTRO';
+    if (regs.length){
+      const ultimo = regs.slice().sort((a,b)=>a.ts.localeCompare(b.ts)).pop();
+      estado = ultimo.estadoHora || 'SIN REGISTRO';
+    }
 
-if (regs.length){
-  const ultimo = regs.slice().sort((a,b)=>a.ts.localeCompare(b.ts)).pop();
-  estado = ultimo.estadoHora || 'SIN REGISTRO';
-}
-
-  // CORRECCIÓN: BUSCAR LA HORA DE INICIO REAL CORRECTA (ÚLTIMO TRAMO)
-  let inicioReal = null;
-  const opBusqueda = opActiva || (prog ? prog.op : '');
-  if (opBusqueda) {
-    const tramos = state.historialOps.filter(item => item.linea === linea && String(item.op) === String(opBusqueda));
-    if (tramos.length > 0) {
-      // Tomar el tramo que sigue abierto, o en su defecto el último registrado
-      const tramoActivo = tramos.find(t => t.finReal === null) || tramos[tramos.length - 1];
-      if (tramoActivo && tramoActivo.inicioReal) {
-        inicioReal = tramoActivo.inicioReal;
+    let inicioReal = null;
+    const opBusqueda = opActiva || (prog ? prog.op : '');
+    if (opBusqueda) {
+      const tramos = state.historialOps.filter(item => item.linea === linea && String(item.op) === String(opBusqueda));
+      if (tramos.length > 0) {
+        const tramoActivo = tramos.find(t => t.finReal === null) || tramos[tramos.length - 1];
+        if (tramoActivo && tramoActivo.inicioReal) {
+          inicioReal = tramoActivo.inicioReal;
+        }
       }
     }
-  }
 
-  return { linea, opActiva, unidades, plan, diferencia, cumplimiento, uphPlan, uphReal, estado,
-           sinRegistros, opProgramada: prog ? prog.op : '', inicioReal };
-});
-
-/*
- * Producción por hora del día operativo.
- *
- * El día operativo empieza a las 23:00 del día anterior
- * y termina a las 23:00 del día actual.
- *
- * Coordenadas utilizadas:
- * 23 = 23:00 del día anterior
- * 24 = 00:00 del día del programa
- * 25 = 01:00
- * ...
- * 46 = 22:00
- */
-const horas = [];
-
-for (let horaOperativa = 14; horaOperativa <= 37; horaOperativa++) {
-
-  const horaReloj =
-    ((horaOperativa % 24) + 24) % 24;
-
-  const registrosHora =
-    regsHoy.filter(function(registro){
-
-      return (
-        horaDeRegistro(
-          registro.hora
-        ) === horaReloj
-      );
-
-    });
-
-  const realHora =
-    registrosHora.reduce(
-      function(total, registro){
-
-        return (
-          total +
-          Number(
-            registro.cantidadHora || 0
-          )
-        );
-
-      },
-      0
-    );
-
-  const planHora =
-    registrosHora.reduce(
-      function(total, registro){
-
-        return (
-          total +
-          Number(
-            registro.uphPlan || 0
-          )
-        );
-
-      },
-      0
-    );
-
-  horas.push({
-
-    hora: horaOperativa,
-
-    real: realHora,
-
-    plan: planHora
-
+    return { linea, opActiva, unidades, plan, diferencia, cumplimiento, uphPlan, uphReal, estado,
+             sinRegistros, opProgramada: prog ? prog.op : '', inicioReal };
   });
 
-}
-return {
-  fecha,
-  unidadesProducidas,
-  planDelDia,
-  cumplimientoGlobal,
-  registros,
-  lineasNoCumplen,
-  lineasActivas,
-  porLinea,
-  horas
-};
+  // Cálculo del gráfico de barras por horas (De 14 a 37 cubre el día operativo completo)
+  const horas = [];
+  for (let horaOperativa = 14; horaOperativa <= 37; horaOperativa++) {
+    const horaReloj = ((horaOperativa % 24) + 24) % 24;
+    const registrosHora = regsHoy.filter(registro => horaDeRegistro(registro.hora) === horaReloj);
+
+    const realHora = registrosHora.reduce((total, registro) => total + Number(registro.cantidadHora || 0), 0);
+    const planHora = registrosHora.reduce((total, registro) => total + Number(registro.uphPlan || 0), 0);
+
+    horas.push({ hora: horaOperativa, real: realHora, plan: planHora });
+  }
+  
+  return { fecha, unidadesProducidas, planDelDia, cumplimientoGlobal, registros, lineasNoCumplen, lineasActivas, porLinea, horas };
 }
 
+/* ---------------- 9. CÁLCULO DE CORTES DE TURNO ---------------- 
+   Aquí se establecen los horarios que definen los turnos.
+   Si algún día cambian los turnos (Ej. ponerlos a las 5:00, 13:00, 21:00)
+   debes modificar los números de estas 3 funciones siguientes.
+-------------------------------------------------------------- */
 function obtenerTurnoActual(){
+  const ahora = new Date();
+  const hora = ahora.getHours() + ahora.getMinutes() / 60;
 
-  const ahora =
-    new Date();
-
-  const hora =
-    ahora.getHours() +
-    ahora.getMinutes() / 60;
-
-  if (
-    hora >= 6 &&
-    hora < 14
-  ){
-    return {
-      turno:'T1',
-      inicio:6,
-      fin:14
-    };
-  }
-
-  if (
-    hora >= 14 &&
-    hora < 22
-  ){
-    return {
-      turno:'T2',
-      inicio:14,
-      fin:22
-    };
-  }
-
-  return {
-    turno:'T3',
-    inicio:22,
-    fin:30
-  };
-
+  // Turno 1: 06:00 a 13:59
+  if (hora >= 6 && hora < 14) return { turno:'T1', inicio:6, fin:14 };
+  // Turno 2: 14:00 a 21:59
+  if (hora >= 14 && hora < 22) return { turno:'T2', inicio:14, fin:22 };
+  // Turno 3: 22:00 a 05:59
+  return { turno:'T3', inicio:22, fin:30 };
 }
+
 function calcularTiempoEfectivoTurno(opts){
+  const turno = obtenerTurnoActual();
+  const ahora = new Date();
+  let horaActual = ahora.getHours() + ahora.getMinutes()/60;
 
-  const turno =
-    obtenerTurnoActual();
+  if (turno.turno === 'T3' && horaActual < 6) horaActual += 24;
 
-  const ahora =
-    new Date();
+  let horas = horaActual - turno.inicio;
 
-  let horaActual =
-    ahora.getHours() +
-    ahora.getMinutes()/60;
+  // Descuentos manuales desde los checkboxes del modal
+  // Si en la planta cambia la duración de la cena, cambia este (50/60) por el nuevo tiempo en minutos.
+  if (opts.pausa) horas -= (10 / 60);
+  if (opts.cena) horas -= (50 / 60);
 
-  if (
-    turno.turno === 'T3' &&
-    horaActual < 6
-  ){
-    horaActual += 24;
-  }
+  horas = Math.max(0, horas);
 
-  let horas =
-    horaActual -
-    turno.inicio;
-
-  if (opts.pausa){
-    horas -=
-      (10 / 60);
-  }
-
-  if (opts.cena){
-    horas -=
-      (50 / 60);
-  }
-
-  horas =
-    Math.max(
-      0,
-      horas
-    );
-
-  return {
-    turno: turno.turno,
-    horasEfectivas: horas
-  };
-
+  return { turno: turno.turno, horasEfectivas: horas };
 }
 
 function calcularCorteTurno(opts){
@@ -939,6 +549,8 @@ function calcularCorteTurno(opts){
     );
 
     const uphActual = opActiva ? Number(opActiva.uph || 0) : 0;
+    
+    // Si no se pide nada, pero el operador hizo algo en descanso, regálale el 100% de cumplimiento
     const cumplimiento = programado > 0 ? real / programado : (real > 0 ? 1 : 0);
 
     totalProgramado += programado;
@@ -971,19 +583,6 @@ function horasEntreFechas(inicio, fin){
   return (finFecha - inicioFecha) / 3600000;
 }
 
-function calcularEsperadoLineaDesdeTramos(linea, fechaCorte){
-  const tramos = state.historialOps.filter(item => item.linea === linea);
-  let esperado = 0;
-  tramos.forEach(function(tramo){
-    if (!tramo.inicioReal) return;
-    const inicio = tramo.inicioReal;
-    const fin = tramo.finReal || fechaCorte;
-    const horas = horasEntreFechas(inicio, fin);
-    esperado += horas * Number(tramo.uph || 0);
-  });
-  return esperado;
-}
-
 function calcularProgramadoLineaCorte(linea, fechaCorte, opts){
   const corte = new Date(fechaCorte);
   const horaCorte = corte.getHours() + (corte.getMinutes() / 60);
@@ -993,7 +592,7 @@ function calcularProgramadoLineaCorte(linea, fechaCorte, opts){
   else if (horaCorte >= 14 && horaCorte < 22) inicioTurno = 14;
   else inicioTurno = 22;
 
-  // CORRECCIÓN: La fecha de inicio del turno se calcula aquí afuera para que todo el código la pueda leer
+  // Cálculo de la fecha exacta donde inició el turno
   const inicioTurnoFecha = new Date(corte);
   inicioTurnoFecha.setHours(inicioTurno, 0, 0, 0);
   if (inicioTurno === 22 && horaCorte < 6){
@@ -1014,7 +613,10 @@ function calcularProgramadoLineaCorte(linea, fechaCorte, opts){
     let inicioTramo = new Date(inicioReal);
     let finTramo = new Date(finReal);
 
+    // Si la OP fue del turno anterior, se ignora por completo para este corte
     if (finTramo <= inicioTurnoFecha) return;
+    
+    // Corta exacto al inicio del turno para no arrastrar minutos del turno previo y pedir unidades de más
     if (inicioTramo < inicioTurnoFecha) inicioTramo = new Date(inicioTurnoFecha);
 
     const horas = (finTramo - inicioTramo) / 3600000;
@@ -1024,7 +626,8 @@ function calcularProgramadoLineaCorte(linea, fechaCorte, opts){
     totalProgramado += horas * Number(tramo.uph || 0);
   });
 
-  // ESCUDO ANTI-FANTASMAS (Ahora sí puede leer la variable de inicioTurnoFecha)
+  // ESCUDO ANTI-FANTASMAS PARA EL CORTE
+  // Evita que las pruebas (o errores de operador) sumen horas físicas imposibles
   const horasTurnoTranscurridas = (corte - inicioTurnoFecha) / 3600000;
   if (horasTotales > horasTurnoTranscurridas && horasTurnoTranscurridas > 0) {
      totalProgramado = totalProgramado * (horasTurnoTranscurridas / horasTotales);
@@ -1042,6 +645,7 @@ function calcularProgramadoLineaCorte(linea, fechaCorte, opts){
     }
 
     if (horasDescuento > 0) {
+       // Calcular el UPH promedio para restarle exactamente esas unidades
        const uphPromedio = totalProgramado / horasTotales;
        totalProgramado -= (horasDescuento * uphPromedio);
     }
