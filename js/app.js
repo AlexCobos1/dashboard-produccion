@@ -574,14 +574,12 @@ function renderHorariosAlim() {
   const filas = [
     { id: 'lv_t1', jornada: 'Lunes a Viernes', turno: 'Turno 1' },
     { id: 'lv_t2', jornada: 'Lunes a Viernes', turno: 'Turno 2' },
-    { id: 'lv_t3', jornada: 'Lunes a Viernes', turno: 'Turno 3' },
+    { id: 'lv_t3', jornada: 'Domingo a Viernes', turno: 'Turno 3' }, 
     { id: 's_t1',  jornada: 'Sábados', turno: 'Turno 1' },
     { id: 's_t2',  jornada: 'Sábados', turno: 'Turno 2' },
     { id: 's_t3',  jornada: 'Sábados', turno: 'Turno 3' },
-    // NUEVO: Domingos agregados correctamente para la interfaz
     { id: 'd_t1',  jornada: 'Domingos', turno: 'Turno 1' },
-    { id: 'd_t2',  jornada: 'Domingos', turno: 'Turno 2' },
-    { id: 'd_t3',  jornada: 'Domingos', turno: 'Turno 3' }
+    { id: 'd_t2',  jornada: 'Domingos', turno: 'Turno 2' }
   ];
 
   tbody.innerHTML = filas.map(f => `

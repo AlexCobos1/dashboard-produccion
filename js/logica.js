@@ -132,16 +132,13 @@ async function inicializarEstado(){
 
   // Si en la nube no hay nada guardado, se aplicarán estos valores predeterminados (Ej: 11:10)
   // NUEVO: CARGAR HORARIOS DE ALIMENTACIÓN POR DEFECTO
-  // Si en la nube no hay nada guardado, se aplicarán estos valores predeterminados
   try {
     state.horariosAlim = alimentacionRaw ? JSON.parse(alimentacionRaw) : {
       lv_t1_g1: '11:10', lv_t1_g2: '11:20', lv_t2_g1: '', lv_t2_g2: '', lv_t3_g1: '', lv_t3_g2: '',
       s_t1_g1: '10:00',  s_t1_g2: '10:10', s_t2_g1: '',  s_t2_g2: '', s_t3_g1: '',  s_t3_g2: '',
-      // Domingos añadidos al estado inicial
-      d_t1_g1: '', d_t1_g2: '', d_t2_g1: '', d_t2_g2: '', d_t3_g1: '', d_t3_g2: ''
+      d_t1_g1: '', d_t1_g2: '', d_t2_g1: '', d_t2_g2: '' // d_t3 eliminado
     };
   } catch {
-    // Respaldo de seguridad en caso de que el JSON de Firebase falle
     state.horariosAlim = { 
       lv_t1_g1: '11:10', lv_t1_g2: '11:20', 
       s_t1_g1: '10:00', s_t1_g2: '10:10',
@@ -227,6 +224,8 @@ function calcularDescuentoAlimentacion(linea, fechaInicio, fechaFin) {
   if (grupo === 0) return 0; 
   
   let descuentoHoras = 0;
+  const pausasAplicadas = new Set();
+  
   const diasAComprobar = [new Date(fechaInicio.getFullYear(), fechaInicio.getMonth(), fechaInicio.getDate())];
   const diaFinDate = new Date(fechaFin.getFullYear(), fechaFin.getMonth(), fechaFin.getDate());
   
@@ -236,16 +235,20 @@ function calcularDescuentoAlimentacion(linea, fechaInicio, fechaFin) {
 
   diasAComprobar.forEach(diaBase => {
      
-     // Detectar automáticamente qué día de la semana es para aplicar su horario correspondiente
-     let pfx = 'lv'; // Lunes a Viernes
-     if (diaBase.getDay() === 6) pfx = 's'; // Sábado
-     else if (diaBase.getDay() === 0) pfx = 'd'; // Domingo
+     // Detectar día de la semana
+     let pfx = 'lv'; 
+     if (diaBase.getDay() === 6) pfx = 's'; 
+     else if (diaBase.getDay() === 0) pfx = 'd'; 
      
      ['t1', 't2', 't3'].forEach(t => {
-        const horaStr = state.horariosAlim[`${pfx}_${t}_g${grupo}`];
         
-        // REGLA INTELIGENTE: Si la casilla está vacía (no ingresaste hora), 
-        // ignora este turno y no descuenta nada (la cuenta sigue normal).
+        // REGLA DE EXCEPCIÓN: Si es Domingo (d) y Turno 3 (t3), usar la casilla de Lunes a Viernes (lv)
+        let prefijoBuscado = pfx;
+        if (pfx === 'd' && t === 't3') {
+            prefijoBuscado = 'lv';
+        }
+        
+        const horaStr = state.horariosAlim[`${prefijoBuscado}_${t}_g${grupo}`];
         if (!horaStr) return; 
         
         const [h, m] = horaStr.split(':').map(Number);
@@ -253,20 +256,24 @@ function calcularDescuentoAlimentacion(linea, fechaInicio, fechaFin) {
         inicioPausa.setHours(h, m, 0, 0);
         
         const opcionesPausa = [inicioPausa, new Date(inicioPausa.getTime() + 86400000), new Date(inicioPausa.getTime() - 86400000)];
+        
         opcionesPausa.forEach(pausaInic => {
-           const pausaFin = new Date(pausaInic.getTime() + (50 * 60000)); // 50 min de duración
+           const pausaId = pausaInic.getTime(); 
+           if (pausasAplicadas.has(pausaId)) return;
+           
+           const pausaFin = new Date(pausaInic.getTime() + (50 * 60000));
            const maxInicio = new Date(Math.max(fechaInicio, pausaInic));
            const minFin = new Date(Math.min(fechaFin, pausaFin));
            
            if (maxInicio < minFin) {
               descuentoHoras += (minFin - maxInicio) / 3600000; 
+              pausasAplicadas.add(pausaId);
            }
         });
      });
   });
   return Math.min(descuentoHoras, 2.5); 
 }
-
 
 /* ---------------- 7. REGISTRO DE PRODUCCIÓN HORA A HORA (CORE) ----------------
    Esta es la función más importante. Recibe las unidades, calcula los acumulados,
