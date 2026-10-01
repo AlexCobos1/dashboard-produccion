@@ -454,6 +454,35 @@ Ingresa únicamente las unidades producidas durante esta hora. El sistema calcul
         </form>
       </div>
     </div>
+
+    <!-- NUEVO: PANEL DE HORARIOS DE ALIMENTACIÓN -->
+    <div class="panel" style="margin-top: 20px;">
+      <div class="panel-head">
+        <div>
+          <h3>Horarios de Alimentación (Descuento automático de 50 min)</h3>
+          <div class="desc">Define la hora de salida de los grupos. El sistema congelará la exigencia matemática (UPH) en el Hora a Hora durante este lapso.</div>
+        </div>
+      </div>
+      <div class="panel-body table-scroll">
+        <table class="data-table" style="min-width: 500px;">
+          <thead>
+            <tr>
+              <th>Jornada</th>
+              <th>Turno</th>
+              <th>Grupo 1 <br><span style="font-size:10.5px; font-weight:normal;">Versafill, Manuales, PKB6, MRM</span></th>
+              <th>Grupo 2 <br><span style="font-size:10.5px; font-weight:normal;">PKBs 1-5, Omas, Probadores</span></th>
+            </tr>
+          </thead>
+          <tbody id="tbodyHorariosAlim">
+            <!-- Renderizado dinámicamente por JS -->
+          </tbody>
+        </table>
+      </div>
+      <div class="panel-foot">
+        <button id="btnGuardarAlimentacion" class="btn btn-primary btn-sm">Guardar Horarios</button>
+      </div>
+    </div>
+    <!-- FIN NUEVO PANEL -->
   </section>
 
 </main>
