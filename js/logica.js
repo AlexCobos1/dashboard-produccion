@@ -148,7 +148,7 @@ async function inicializarEstado(){
       d_t1_g1: '', d_t1_g2: '' 
     };
   }
-
+}
 /* ---------------- 5. UTILIDADES Y FORMATOS DE TEXTO ---------------- */
 const fmtInt   = n => Math.round(n||0).toLocaleString('es-CO');
 const fmtDec   = (n,d=1) => (n||0).toLocaleString('es-CO', {minimumFractionDigits:d, maximumFractionDigits:d});
