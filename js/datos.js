@@ -85,7 +85,15 @@ let CAUSALES_PARO =
     return { ...causal };
   });
 
-function turnoDe(horaInicio){
+function turnoDe(horaInicio, diaObj = new Date()){
+  const dia = diaObj.getDay();
+  // Regla especial para los sábados
+  if (dia === 6) {
+    if (horaInicio >= 6 && horaInicio < 13) return 'T1';
+    if (horaInicio >= 13 && horaInicio < 20) return 'T2';
+    return 'T3';
+  }
+  // Regla estándar (Lunes a Viernes y Domingo)
   if (horaInicio >= 6 && horaInicio < 14) return 'T1';
   if (horaInicio >= 14 && horaInicio < 22) return 'T2';
   return 'T3';

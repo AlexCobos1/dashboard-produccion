@@ -518,46 +518,61 @@ function computeDashboard(){
   return { fecha, unidadesProducidas, planDelDia, cumplimientoGlobal, registros, lineasNoCumplen, lineasActivas, porLinea, horas };
 }
 
-/* ---------------- 9. CÁLCULO DE CORTES DE TURNO ---------------- 
-   Aquí se establecen los horarios que definen los turnos.
-   Si algún día cambian los turnos (Ej. ponerlos a las 5:00, 13:00, 21:00)
-   debes modificar los números de estas 3 funciones siguientes.
--------------------------------------------------------------- */
-function obtenerTurnoActual(){
-  const ahora = new Date();
-  const hora = ahora.getHours() + ahora.getMinutes() / 60;
+/* ---------------- 9. CÁLCULO DE CORTES DE TURNO (DINÁMICO) ---------------- */
 
-  // Turno 1: 06:00 a 13:59
-  if (hora >= 6 && hora < 14) return { turno:'T1', inicio:6, fin:14 };
-  // Turno 2: 14:00 a 21:59
-  if (hora >= 14 && hora < 22) return { turno:'T2', inicio:14, fin:22 };
-  // Turno 3: 22:00 a 05:59
-  return { turno:'T3', inicio:22, fin:30 };
+// 1. Matriz de turnos basada en el día físico
+function obtenerDefinicionTurnos(fechaObj) {
+  const dia = fechaObj.getDay();
+  const hora = fechaObj.getHours() + (fechaObj.getMinutes() / 60);
+  
+  // Si físicamente es sábado (desde las 6:00 a.m. hasta el domingo a las 5:59 a.m.)
+  const esHorarioSabado = (dia === 6 && hora >= 6) || (dia === 0 && hora < 6);
+  
+  if (esHorarioSabado) {
+    return {
+      T1: { turno: 'T1', inicio: 6, fin: 13 },
+      T2: { turno: 'T2', inicio: 13, fin: 20 },
+      T3: { turno: 'T3', inicio: 20, fin: 30 } // 30 = 6:00am del domingo
+    };
+  } else {
+    // Lunes a Viernes y Domingo en la noche
+    return {
+      T1: { turno: 'T1', inicio: 6, fin: 14 },
+      T2: { turno: 'T2', inicio: 14, fin: 22 },
+      T3: { turno: 'T3', inicio: 22, fin: 30 } // 30 = 6:00am del día siguiente
+    };
+  }
+}
+
+function obtenerTurnoActual(fechaParam = new Date()){
+  const definicion = obtenerDefinicionTurnos(fechaParam);
+  const horaReal = fechaParam.getHours() + (fechaParam.getMinutes() / 60);
+  const horaOperativa = horaReal < 6 ? horaReal + 24 : horaReal;
+
+  if (horaOperativa >= definicion.T1.inicio && horaOperativa < definicion.T1.fin) return definicion.T1;
+  if (horaOperativa >= definicion.T2.inicio && horaOperativa < definicion.T2.fin) return definicion.T2;
+  return definicion.T3;
 }
 
 function calcularTiempoEfectivoTurno(opts){
-  const turno = obtenerTurnoActual();
   const ahora = new Date();
+  const turno = obtenerTurnoActual(ahora);
+  
   let horaActual = ahora.getHours() + ahora.getMinutes()/60;
-
   if (turno.turno === 'T3' && horaActual < 6) horaActual += 24;
 
   let horas = horaActual - turno.inicio;
-
-  // Descuentos manuales desde los checkboxes del modal
-  // Si en la planta cambia la duración de la cena, cambia este (50/60) por el nuevo tiempo en minutos.
   if (opts.pausa) horas -= (10 / 60);
-  if (opts.cena) horas -= (50 / 60);
 
-  horas = Math.max(0, horas);
-
-  return { turno: turno.turno, horasEfectivas: horas };
+  return { turno: turno.turno, horasEfectivas: Math.max(0, horas) };
 }
 
 function calcularCorteTurno(opts){
   const datosTurno = calcularTiempoEfectivoTurno(opts);
   const fechaCorte = new Date().toISOString();
-  const fechaOperativa = obtenerFechaOperativa(new Date());
+  
+  // Usa tu misma regla de 14:00 a 14:00 para alinear con el Dashboard
+  const fechaOperativa = obtenerFechaOperativa(new Date()); 
   const resultado = [];
 
   const lineasUnicas = [...new Set(state.programacion.map(x => x.linea))];
@@ -567,68 +582,49 @@ function calcularCorteTurno(opts){
 
   lineasUnicas.forEach(function(linea){
     const programado = calcularProgramadoLineaCorte(linea, fechaCorte, opts);
-
+    
+    // Busca los registros que coinciden con el ciclo de 2pm a 2pm
     const real = state.historico
       .filter(r => r.linea === linea && r.fechaOperativa === fechaOperativa)
       .reduce((total, r) => total + Number(r.cantidadHora || 0), 0);
 
-    const opActiva = state.programacion.find(
-      p => p.linea === linea && p.iniciada === true && p.cerrada !== true
-    );
-
+    const opActiva = state.programacion.find(p => p.linea === linea && p.iniciada === true && p.cerrada !== true);
     const uphActual = opActiva ? Number(opActiva.uph || 0) : 0;
-    
-    // Si no se pide nada, pero el operador hizo algo en descanso, regálale el 100% de cumplimiento
     const cumplimiento = programado > 0 ? real / programado : (real > 0 ? 1 : 0);
 
     totalProgramado += programado;
     totalReal += real;
 
     resultado.push({
-      linea,
-      programado: Math.round(programado),
-      uph: uphActual,
-      real: Math.round(real),
-      cumplimiento
+      linea, programado: Math.round(programado), uph: uphActual,
+      real: Math.round(real), cumplimiento
     });
   });
 
-  const cumplimientoGlobal = totalProgramado > 0 ? totalReal / totalProgramado : 0;
-
   return {
-    turno: datosTurno.turno,
-    horasEfectivas: datosTurno.horasEfectivas,
-    totalProgramado: Math.round(totalProgramado),
-    totalReal: Math.round(totalReal),
-    cumplimientoGlobal,
-    detalle: resultado
+    turno: datosTurno.turno, horasEfectivas: datosTurno.horasEfectivas,
+    totalProgramado: Math.round(totalProgramado), totalReal: Math.round(totalReal),
+    cumplimientoGlobal: totalProgramado > 0 ? totalReal / totalProgramado : 0, detalle: resultado
   };
-}
-
-function horasEntreFechas(inicio, fin){
-  const inicioFecha = new Date(inicio);
-  const finFecha = new Date(fin);
-  return (finFecha - inicioFecha) / 3600000;
 }
 
 function calcularProgramadoLineaCorte(linea, fechaCorte, opts){
   const corte = new Date(fechaCorte);
-  const horaCorte = corte.getHours() + (corte.getMinutes() / 60);
-
-  let inicioTurno;
-  if (horaCorte >= 6 && horaCorte < 14) inicioTurno = 6;
-  else if (horaCorte >= 14 && horaCorte < 22) inicioTurno = 14;
-  else inicioTurno = 22;
+  const datosTurno = obtenerTurnoActual(corte);
+  const inicioTurnoReal = datosTurno.inicio >= 24 ? datosTurno.inicio - 24 : datosTurno.inicio;
 
   const inicioTurnoFecha = new Date(corte);
-  inicioTurnoFecha.setHours(inicioTurno, 0, 0, 0);
-  if (inicioTurno === 22 && horaCorte < 6){
+  inicioTurnoFecha.setHours(Math.floor(inicioTurnoReal), 0, 0, 0);
+  const horaCorteDecimal = corte.getHours() + (corte.getMinutes() / 60);
+  
+  // Ajuste seguro para los turnos 3 que cruzan la medianoche
+  if (datosTurno.turno === 'T3' && horaCorteDecimal < 6){
     inicioTurnoFecha.setDate(inicioTurnoFecha.getDate() - 1);
   }
 
   let totalProgramado = 0;
   let horasTotales = 0;
-  let descuentoAlimentacionTotal = 0; // NUEVO: Acumulador inteligente
+  let descuentoAlimentacionTotal = 0;
 
   const tramosLinea = state.historialOps.filter(x => x.linea === linea);
 
@@ -650,27 +646,19 @@ function calcularProgramadoLineaCorte(linea, fechaCorte, opts){
     horasTotales += horas;
     totalProgramado += horas * Number(tramo.uph || 0);
 
-    // NUEVO: Calcula automáticamente si el turno cruzó con el horario de comida
     descuentoAlimentacionTotal += calcularDescuentoAlimentacion(linea, inicioTramo, finTramo);
   });
 
-  // ESCUDO ANTI-FANTASMAS
   const horasTurnoTranscurridas = (corte - inicioTurnoFecha) / 3600000;
   if (horasTotales > horasTurnoTranscurridas && horasTurnoTranscurridas > 0) {
      totalProgramado = totalProgramado * (horasTurnoTranscurridas / horasTotales);
      horasTotales = horasTurnoTranscurridas;
   }
 
-  // APLICAR DESCUENTOS (Alimentación automática + Pausa manual)
   if (horasTotales > 0) {
-    let horasDescuento = descuentoAlimentacionTotal; // Toma el cálculo automático
-    
-    // La pausa activa sigue siendo con checkbox porque no tiene hora fija
+    let horasDescuento = descuentoAlimentacionTotal; 
     if (opts && opts.pausa) horasDescuento += (10 / 60);
-
-    if (horasDescuento > horasTotales) {
-      horasDescuento = horasTotales;
-    }
+    if (horasDescuento > horasTotales) horasDescuento = horasTotales;
 
     if (horasDescuento > 0) {
        const uphPromedio = totalProgramado / horasTotales;
