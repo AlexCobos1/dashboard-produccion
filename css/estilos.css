@@ -525,9 +525,34 @@
     .form-grid, .readout{ grid-template-columns: 1fr; }
   }
   @media (max-width: 620px){
+  @media (max-width: 620px){
     .kpi-grid{ grid-template-columns: repeat(2, 1fr); }
-    .topbar-inner{ flex-wrap:wrap; }
-    .clockbox{ order:3; width:100%; text-align:left; padding-top:4px; }
+    
+    /* --- INICIO MEJORA UI MÓVIL: BARRA SUPERIOR --- */
+    .topbar-inner { 
+      flex-wrap: wrap; 
+      justify-content: space-between; /* Separa Logo y Reloj */
+      padding: 12px 16px;
+    }
+    .clockbox { 
+      order: 2; /* Sube el reloj al lado del logo */
+      width: auto; 
+      text-align: right; 
+      padding-top: 0; 
+    }
+    .nav { 
+      order: 3; /* Baja el menú a su propia fila */
+      width: 100%; 
+      margin-top: 12px; 
+      padding: 6px; 
+    }
+    .nav button {
+      padding: 12px 20px; /* Área táctil más grande para dedos */
+      font-size: 14.5px;  /* Letra más legible */
+    }
+    /* --- FIN MEJORA UI MÓVIL --- */
+
+    .page-head{ align-items:flex-start; }
     .page-head{ align-items:flex-start; }
 .paro-head{
   flex-direction: column;
