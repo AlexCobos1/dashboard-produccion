@@ -527,48 +527,48 @@
   @media (max-width: 620px){
     .kpi-grid{ grid-template-columns: repeat(2, 1fr); }
     
-    /* --- INICIO MEJORA UI MÓVIL: BARRA SUPERIOR --- */
+    /* --- ESTRUCTURA GRID (ANTI-COLISIONES MÓVIL) --- */
     .topbar-inner { 
-      flex-wrap: wrap; 
-      justify-content: space-between; 
+      display: grid !important;
+      grid-template-columns: minmax(0, 1fr) auto; /* Col 1: Logo, Col 2: Reloj */
+      row-gap: 12px;
+      column-gap: 8px;
       padding: 12px 16px;
-      gap: 10px; /* Reducimos la separación para ganar espacio */
     }
     
-    /* Le damos flexibilidad al logo pero con un límite */
     .brand {
-      flex: 1;
-      min-width: 0; 
+      grid-column: 1;
+      grid-row: 1;
+      min-width: 0; /* Vital para que el texto se pueda recortar */
     }
     
-    /* Si el subtítulo es muy largo, pone "..." en vez de empujar al reloj */
     .brand-text span {
       display: block;
       white-space: nowrap;
       overflow: hidden;
-      text-overflow: ellipsis;
+      text-overflow: ellipsis; /* Pone "..." si el texto es muy largo */
     }
 
     .clockbox { 
-      order: 2; 
-      width: auto; 
-      text-align: right; 
-      padding-top: 0; 
-      flex-shrink: 0; /* Escudo: Prohíbe que el reloj se aplaste o se baje */
+      grid-column: 2;
+      grid-row: 1;
+      text-align: right;
+      padding-top: 0;
+      width: auto;
     }
     
     .nav { 
-      order: 3; 
+      grid-column: 1 / 3; /* Ocupa las dos columnas en la fila de abajo */
+      grid-row: 2;
       width: 100%; 
-      margin-top: 8px; 
-      padding: 4px; 
+      margin: 0;
     }
     
     .nav button {
-      padding: 10px 18px; 
+      padding: 12px 18px; /* Botones más altos y fáciles de tocar */
       font-size: 14px;  
     }
-    /* --- FIN MEJORA UI MÓVIL --- */
+    /* --- FIN ESTRUCTURA GRID --- */
 
     .page-head{ align-items:flex-start; }
     
@@ -594,33 +594,3 @@
       padding-left: 44px;
     }
   }
-
-    .page-head{ align-items:flex-start; }
-    .page-head{ align-items:flex-start; }
-.paro-head{
-  flex-direction: column;
-}
-
-.paro-grid{
-  grid-template-columns: 1fr;
-}
-
-.paro-actions{
-  align-items: stretch;
-  flex-direction: column;
-}
-
-.paro-actions .btn{
-  width: 100%;
-}
-
-.paro-activo-info{
-  align-items: flex-start;
-  flex-wrap: wrap;
-}
-
-.paro-contador{
-  width: 100%;
-  padding-left: 44px;
-  }
-}
