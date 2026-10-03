@@ -525,32 +525,75 @@
     .form-grid, .readout{ grid-template-columns: 1fr; }
   }
   @media (max-width: 620px){
-  @media (max-width: 620px){
     .kpi-grid{ grid-template-columns: repeat(2, 1fr); }
     
     /* --- INICIO MEJORA UI MÓVIL: BARRA SUPERIOR --- */
     .topbar-inner { 
       flex-wrap: wrap; 
-      justify-content: space-between; /* Separa Logo y Reloj */
+      justify-content: space-between; 
       padding: 12px 16px;
+      gap: 10px; /* Reducimos la separación para ganar espacio */
     }
+    
+    /* Le damos flexibilidad al logo pero con un límite */
+    .brand {
+      flex: 1;
+      min-width: 0; 
+    }
+    
+    /* Si el subtítulo es muy largo, pone "..." en vez de empujar al reloj */
+    .brand-text span {
+      display: block;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
     .clockbox { 
-      order: 2; /* Sube el reloj al lado del logo */
+      order: 2; 
       width: auto; 
       text-align: right; 
       padding-top: 0; 
+      flex-shrink: 0; /* Escudo: Prohíbe que el reloj se aplaste o se baje */
     }
+    
     .nav { 
-      order: 3; /* Baja el menú a su propia fila */
+      order: 3; 
       width: 100%; 
-      margin-top: 12px; 
-      padding: 6px; 
+      margin-top: 8px; 
+      padding: 4px; 
     }
+    
     .nav button {
-      padding: 12px 20px; /* Área táctil más grande para dedos */
-      font-size: 14.5px;  /* Letra más legible */
+      padding: 10px 18px; 
+      font-size: 14px;  
     }
     /* --- FIN MEJORA UI MÓVIL --- */
+
+    .page-head{ align-items:flex-start; }
+    
+    .paro-head{
+      flex-direction: column;
+    }
+    .paro-grid{
+      grid-template-columns: 1fr;
+    }
+    .paro-actions{
+      align-items: stretch;
+      flex-direction: column;
+    }
+    .paro-actions .btn{
+      width: 100%;
+    }
+    .paro-activo-info{
+      align-items: flex-start;
+      flex-wrap: wrap;
+    }
+    .paro-contador{
+      width: 100%;
+      padding-left: 44px;
+    }
+  }
 
     .page-head{ align-items:flex-start; }
     .page-head{ align-items:flex-start; }
