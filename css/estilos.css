@@ -527,48 +527,42 @@
   @media (max-width: 620px){
     .kpi-grid{ grid-template-columns: repeat(2, 1fr); }
     
-    /* --- ESTRUCTURA GRID (ANTI-COLISIONES MÓVIL) --- */
+    /* --- ESTRUCTURA APILADA EN 3 PISOS (MÓVIL) --- */
     .topbar-inner { 
-      display: grid !important;
-      grid-template-columns: minmax(0, 1fr) auto; /* Col 1: Logo, Col 2: Reloj */
-      row-gap: 12px;
-      column-gap: 8px;
-      padding: 12px 16px;
+      display: flex !important;
+      flex-direction: column; /* Apila los elementos de arriba a abajo */
+      align-items: flex-start; /* Alinea todo a la izquierda */
+      gap: 14px; /* Espacio limpio entre el título, la fecha y los botones */
+      padding: 16px;
     }
     
     .brand {
-      grid-column: 1;
-      grid-row: 1;
-      min-width: 0; /* Vital para que el texto se pueda recortar */
+      width: 100%;
     }
     
+    /* Al tener su propia línea, dejamos que el texto respire natural */
     .brand-text span {
       display: block;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis; /* Pone "..." si el texto es muy largo */
+      white-space: normal;
     }
 
     .clockbox { 
-      grid-column: 2;
-      grid-row: 1;
-      text-align: right;
+      width: 100%;
+      text-align: left; /* Cambiamos el reloj a la izquierda para alinear con el título */
       padding-top: 0;
-      width: auto;
     }
     
     .nav { 
-      grid-column: 1 / 3; /* Ocupa las dos columnas en la fila de abajo */
-      grid-row: 2;
       width: 100%; 
       margin: 0;
+      padding: 0;
     }
     
     .nav button {
-      padding: 12px 18px; /* Botones más altos y fáciles de tocar */
+      padding: 12px 18px; 
       font-size: 14px;  
     }
-    /* --- FIN ESTRUCTURA GRID --- */
+    /* --- FIN ESTRUCTURA APILADA --- */
 
     .page-head{ align-items:flex-start; }
     
