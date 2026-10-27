@@ -351,22 +351,24 @@
         </div>
       </div>
 
-      <!-- NUEVO: PANEL DE HORARIOS DE ALIMENTACIÓN -->
+      <!-- NUEVO: PANEL DE HORARIOS DE ALIMENTACIÓN Y PAUSAS -->
       <div class="panel" style="margin-top: 20px;">
         <div class="panel-head">
           <div>
-            <h3>Horarios de Alimentación (Descuento automático de 50 min)</h3>
-            <div class="desc">Define la hora de salida de los grupos. El sistema congelará la exigencia matemática (UPH) en el Hora a Hora durante este lapso.</div>
+            <h3>Horarios de Alimentación (50 min) y Pausas Activas (10 min)</h3>
+            <div class="desc">Define la hora de inicio por turno. El sistema muestra el rango (Inicio → Fin) y descuenta automáticamente la exigencia matemática en el Hora a Hora y Cortes.</div>
           </div>
         </div>
         <div class="panel-body table-scroll">
-          <table class="data-table" style="min-width: 500px;">
+          <table class="data-table" style="min-width: 620px;">
             <thead>
               <tr>
                 <th>Jornada</th>
                 <th>Turno</th>
-                <th>Grupo 1 <br><span style="font-size:10.5px; font-weight:normal;">Versafill, Manuales, PKB6, MRM</span></th>
-                <th>Grupo 2 <br><span style="font-size:10.5px; font-weight:normal;">PKBs 1-5, Omas, Probadores</span></th>
+                <th>Grupo 1 (50 min) <br><span style="font-size:10.5px; font-weight:normal;">Versafill, Manuales, PKB6, MRM</span></th>
+                <th>Grupo 2 (50 min) <br><span style="font-size:10.5px; font-weight:normal;">PKBs 1-5, Omas, Probadores</span></th>
+                <th>Pausas Activas (10 min) <br><span style="font-size:10.5px; font-weight:normal;">Descuento automático por turno</span></th>
+                <th>Acción</th>
               </tr>
             </thead>
             <tbody id="tbodyHorariosAlim">
@@ -384,7 +386,7 @@
   </main>
 
   <!-- ===================== FOOTER ===================== -->
-  <footer class="appfoot">Sistema de Producción · CRAA · app web Lean.</footer>
+  <footer class="appfoot">Sistema de Producción · CRAA · App Web Lean.</footer>
 
   <!-- ===================== MODALES GLOBALES ===================== -->
   
@@ -455,16 +457,10 @@
     <div class="modal-box" style="max-width:700px;">
       <h4>📊 CORTE DEL TURNO</h4>
       <div class="msg" style="margin-bottom:16px;">
-        Seleccione los descuentos aplicables para calcular el tiempo efectivo.
+        El cálculo del tiempo efectivo descontará automáticamente los <b>50 minutos de alimentación</b> y los <b>10 minutos de pausas activas</b> según los horarios programados por turno.
       </div>
       
-      <div style="display:flex; flex-direction:column; gap:10px; margin-bottom:20px;">
-        <label>
-          <input type="checkbox" id="chkPausaActiva"> Pausas activas (10 minutos)
-        </label>
-      </div>
-      
-      <div id="cortePreview" style="min-height:60px; font-size:13px; color:#555;"></div>
+      <div id="cortePreview" style="min-height:20px; font-size:13px; color:#555;"></div>
       
       <div class="modal-actions">
         <button type="button" class="btn btn-ghost btn-sm" id="btnCerrarCorte">Cerrar</button>
