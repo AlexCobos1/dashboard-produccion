@@ -130,20 +130,27 @@ async function inicializarEstado(){
   try{ state.historialOps = historialOpsRaw ? JSON.parse(historialOpsRaw) : []; }
   catch{ state.historialOps = []; }
 
-  // Si en la nube no hay nada guardado, se aplicarán estos valores predeterminados (Ej: 11:10)
-  // NUEVO: CARGAR HORARIOS DE ALIMENTACIÓN POR DEFECTO
+// NUEVO: CARGAR HORARIOS DE ALIMENTACIÓN (GRUPO 1 Y 2) + PAUSAS ACTIVAS
+  const defaultHorarios = {
+    lv_t1_g1: '11:10', lv_t1_g2: '11:20', lv_t1_pausa: '',
+    lv_t2_g1: '',      lv_t2_g2: '',      lv_t2_pausa: '',
+    lv_t3_g1: '',      lv_t3_g2: '',      lv_t3_pausa: '',
+    s_t1_g1: '10:00',  s_t1_g2: '10:10',  s_t1_pausa: '',
+    s_t2_g1: '',       s_t2_g2: '',       s_t2_pausa: '',
+    s_t3_g1: '',       s_t3_g2: '',       s_t3_pausa: '',
+    d_t1_g1: '',       d_t1_g2: '',       d_t1_pausa: '',
+    d_t2_g1: '',       d_t2_g2: '',       d_t2_pausa: ''
+  };
   try {
-    state.horariosAlim = alimentacionRaw ? JSON.parse(alimentacionRaw) : {
-      lv_t1_g1: '11:10', lv_t1_g2: '11:20', lv_t2_g1: '', lv_t2_g2: '', lv_t3_g1: '', lv_t3_g2: '',
-      s_t1_g1: '10:00',  s_t1_g2: '10:10', s_t2_g1: '',  s_t2_g2: '', s_t3_g1: '',  s_t3_g2: '',
-      d_t1_g1: '', d_t1_g2: '', d_t2_g1: '', d_t2_g2: '' // d_t3 eliminado
-    };
+    const parsed = alimentacionRaw ? JSON.parse(alimentacionRaw) : {};
+    state.horariosAlim = { ...defaultHorarios };
+    ['lv_t1', 'lv_t2', 'lv_t3', 's_t1', 's_t2', 's_t3', 'd_t1', 'd_t2'].forEach(pref => {
+      state.horariosAlim[`${pref}_g1`] = typeof parsed[`${pref}_g1`] === 'string' ? parsed[`${pref}_g1`] : defaultHorarios[`${pref}_g1`];
+      state.horariosAlim[`${pref}_g2`] = typeof parsed[`${pref}_g2`] === 'string' ? parsed[`${pref}_g2`] : defaultHorarios[`${pref}_g2`];
+      state.horariosAlim[`${pref}_pausa`] = typeof parsed[`${pref}_pausa`] === 'string' ? parsed[`${pref}_pausa`] : '';
+    });
   } catch {
-    state.horariosAlim = { 
-      lv_t1_g1: '11:10', lv_t1_g2: '11:20', 
-      s_t1_g1: '10:00', s_t1_g2: '10:10',
-      d_t1_g1: '', d_t1_g2: '' 
-    };
+    state.horariosAlim = { ...defaultHorarios };
   }
 }
 /* ---------------- 5. UTILIDADES Y FORMATOS DE TEXTO ---------------- */
@@ -207,26 +214,18 @@ function registrarInicioTramoOP(prog, fechaInicio){
 }
 
 
-/* ---------------- 6. LÓGICA DE ALIMENTACIÓN (NUEVO) ----------------
-   Si en el futuro añades más líneas a la planta, debes agregarlas
-   en la lista 'g1' o 'g2' de aquí abajo para que se les aplique el descuento
-   automático de los 50 minutos.
------------------------------------------------------------------ */
-
 function calcularDescuentoAlimentacion(linea, fechaInicio, fechaFin) {
   if (!state.horariosAlim) return 0;
   
-  const g1 = ['VERSAFILL', 'MANUAL 1', 'PKB 6', 'MANUAL 2', 'MANUAL 3', 'MRM'];
+  const g1 = ['VERSAFILL', 'MANUAL 1', 'PKB 6', 'MANUAL 2', 'MANUAL 3', 'MRM', 'JVH1', 'JVH2', 'ESMALTES'];
   const g2 = ['PKB 1', 'PKB 2', 'PKB 3', 'PKB 4', 'PKB 5', 'OMAS', 'PROBADORES'];
   
-  const lin = linea.trim().toUpperCase();
-  let grupo = g1.includes(lin) ? 1 : (g2.includes(lin) ? 2 : 0);
-  if (grupo === 0) return 0; 
+  const lin = (linea || '').trim().toUpperCase();
+  let grupo = g1.includes(lin) ? 1 : (g2.includes(lin) ? 2 : (lin === 'GENERAL' ? 1 : 0));
   
   let descuentoHoras = 0;
   const pausasAplicadas = new Set();
   
-  // 1. Determinar el Día Operativo (Cualquier hora antes de las 6:00 AM pertenece al día anterior)
   const getDiaOperativo = (fecha) => {
      const d = new Date(fecha);
      if (d.getHours() < 6) d.setDate(d.getDate() - 1);
@@ -245,46 +244,62 @@ function calcularDescuentoAlimentacion(linea, fechaInicio, fechaFin) {
   }
   
   diasOperativos.forEach(diaOp => {
-     const dayOfWeek = diaOp.getDay(); // 0: Dom, 1: Lun, ..., 5: Vie, 6: Sab
-     
-     // 2. Si el día operativo es Sábado, usamos 's', de lo contrario 'lv' (Domingo a Viernes)
+     const dayOfWeek = diaOp.getDay(); 
      let pfx = 'lv'; 
      if (dayOfWeek === 6) pfx = 's'; 
+     else if (dayOfWeek === 0) pfx = 'd';
      
      ['t1', 't2', 't3'].forEach(t => {
-        const horaStr = state.horariosAlim[`${pfx}_${t}_g${grupo}`];
-        if (!horaStr) return; 
-        
-        const [h, m] = horaStr.split(':').map(Number);
-        
-        // 3. Reconstruir la hora real (Física) de la comida
-        const inicioPausa = new Date(diaOp);
-        
-        // Si es T3 y comen en la madrugada (Ej: 01:00 AM), ocurre físicamente al día siguiente
-        if (t === 't3' && h < 14) {
-           inicioPausa.setDate(inicioPausa.getDate() + 1);
+        // 1. Descuento de Alimentación (50 min) según Grupo 1 o Grupo 2
+        if (grupo > 0) {
+           const horaAlim = state.horariosAlim[`${pfx}_${t}_g${grupo}`];
+           if (horaAlim) {
+              const [h, m] = horaAlim.split(':').map(Number);
+              if (!Number.isNaN(h) && !Number.isNaN(m)) {
+                 const inicioPausa = new Date(diaOp);
+                 if (t === 't3' && h < 14) inicioPausa.setDate(inicioPausa.getDate() + 1);
+                 inicioPausa.setHours(h, m, 0, 0);
+                 const pausaId = `ALIM_${inicioPausa.getTime()}`;
+                 
+                 if (!pausasAplicadas.has(pausaId)) {
+                    const pausaFin = new Date(inicioPausa.getTime() + (50 * 60000));
+                    const maxInicio = new Date(Math.max(fechaInicio, inicioPausa));
+                    const minFin = new Date(Math.min(fechaFin, pausaFin));
+                    if (maxInicio < minFin) {
+                       descuentoHoras += (minFin - maxInicio) / 3600000; 
+                       pausasAplicadas.add(pausaId);
+                    }
+                 }
+              }
+           }
         }
-        
-        inicioPausa.setHours(h, m, 0, 0);
-        const pausaId = inicioPausa.getTime();
-        
-        // 4. Escudo Anti-Duplicados
-        if (pausasAplicadas.has(pausaId)) return;
-        
-        const pausaFin = new Date(inicioPausa.getTime() + (50 * 60000));
-        const maxInicio = new Date(Math.max(fechaInicio, inicioPausa));
-        const minFin = new Date(Math.min(fechaFin, pausaFin));
-        
-        if (maxInicio < minFin) {
-           descuentoHoras += (minFin - maxInicio) / 3600000; 
-           pausasAplicadas.add(pausaId);
+
+        // 2. Descuento de Pausa Activa (10 min - única por turno para todas las líneas)
+        const horaPausa = state.horariosAlim[`${pfx}_${t}_pausa`];
+        if (horaPausa) {
+           const [hp, mp] = horaPausa.split(':').map(Number);
+           if (!Number.isNaN(hp) && !Number.isNaN(mp)) {
+              const inicioPausaActiva = new Date(diaOp);
+              if (t === 't3' && hp < 14) inicioPausaActiva.setDate(inicioPausaActiva.getDate() + 1);
+              inicioPausaActiva.setHours(hp, mp, 0, 0);
+              const pausaActivaId = `PAUSA_${inicioPausaActiva.getTime()}`;
+              
+              if (!pausasAplicadas.has(pausaActivaId)) {
+                 const pausaActivaFin = new Date(inicioPausaActiva.getTime() + (10 * 60000));
+                 const maxInicioP = new Date(Math.max(fechaInicio, inicioPausaActiva));
+                 const minFinP = new Date(Math.min(fechaFin, pausaActivaFin));
+                 if (maxInicioP < minFinP) {
+                    descuentoHoras += (minFinP - maxInicioP) / 3600000; 
+                    pausasAplicadas.add(pausaActivaId);
+                 }
+              }
+           }
         }
      });
   });
   
-  return Math.min(descuentoHoras, 2.5); 
+  return Math.min(descuentoHoras, 3.0); 
 }
-
 /* ---------------- 7. REGISTRO DE PRODUCCIÓN HORA A HORA (CORE) ----------------
    Esta es la función más importante. Recibe las unidades, calcula los acumulados,
    determina el cumplimiento y le descuenta los tiempos de alimentación.
@@ -391,13 +406,13 @@ function registrarProduccion(opts){
   }
 
   const diferencia = acumuladoNum - planAcumulado;
-  const cumplimiento = planAcumulado > 0 ? acumuladoNum / planAcumulado : 0;
+  const uphObjetivo = Number(prog.uph || 0);
+  const cumplimiento = uphObjetivo > 0 ? Number(cantidadHora) / uphObjetivo : 0;
   let estado = 'PENDIENTE';
 
-  if (planAcumulado > 0){
+  if (uphObjetivo > 0){
     estado = cumplimiento >= 1 ? 'ADELANTADO' : (cumplimiento >= 0.95 ? 'EN TIEMPO' : 'ATRASADO');
   }
-
   // Cálculo del "Semáforo" de la hora (rojo, verde, azul)
   const objetivoHora = Number(prog.uph);
   let estadoHora = 'NO CUMPLE';
@@ -469,7 +484,6 @@ function computeDashboard(){
     });
 
     const diferencia = unidades - plan;
-    const cumplimiento = plan > 0 ? unidades/plan : 0;
     const prog = state.programacion.find(p=>p.linea===linea);
 
     let opActiva = '', uphPlan = prog ? prog.uph : 0, uphReal = 0;
@@ -480,6 +494,9 @@ function computeDashboard(){
       uphPlan = ultimo.uphPlan;
       uphReal = ultimo.cantidadHora;
     }
+
+    // Cumplimiento exclusivo para la tabla de líneas del Dashboard: UPH real / UPH plan
+    const cumplimiento = uphPlan > 0 ? (uphReal / uphPlan) : 0;
     
     let estado = 'SIN REGISTRO';
     if (regs.length){
@@ -503,7 +520,6 @@ function computeDashboard(){
              sinRegistros, opProgramada: prog ? prog.op : '', inicioReal };
   });
 
-  // Cálculo del gráfico de barras por horas (De 14 a 37 cubre el día operativo completo)
   const horas = [];
   for (let horaOperativa = 14; horaOperativa <= 37; horaOperativa++) {
     const horaReloj = ((horaOperativa % 24) + 24) % 24;
@@ -519,27 +535,22 @@ function computeDashboard(){
 }
 
 /* ---------------- 9. CÁLCULO DE CORTES DE TURNO (DINÁMICO) ---------------- */
-
-// 1. Matriz de turnos basada en el día físico
 function obtenerDefinicionTurnos(fechaObj) {
   const dia = fechaObj.getDay();
   const hora = fechaObj.getHours() + (fechaObj.getMinutes() / 60);
-  
-  // Si físicamente es sábado (desde las 6:00 a.m. hasta el domingo a las 5:59 a.m.)
   const esHorarioSabado = (dia === 6 && hora >= 6) || (dia === 0 && hora < 6);
   
   if (esHorarioSabado) {
     return {
       T1: { turno: 'T1', inicio: 6, fin: 13 },
       T2: { turno: 'T2', inicio: 13, fin: 20 },
-      T3: { turno: 'T3', inicio: 20, fin: 30 } // 30 = 6:00am del domingo
+      T3: { turno: 'T3', inicio: 20, fin: 30 }
     };
   } else {
-    // Lunes a Viernes y Domingo en la noche
     return {
       T1: { turno: 'T1', inicio: 6, fin: 14 },
       T2: { turno: 'T2', inicio: 14, fin: 22 },
-      T3: { turno: 'T3', inicio: 22, fin: 30 } // 30 = 6:00am del día siguiente
+      T3: { turno: 'T3', inicio: 22, fin: 30 }
     };
   }
 }
@@ -554,24 +565,26 @@ function obtenerTurnoActual(fechaParam = new Date()){
   return definicion.T3;
 }
 
-function calcularTiempoEfectivoTurno(opts){
+function calcularTiempoEfectivoTurno(){
   const ahora = new Date();
   const turno = obtenerTurnoActual(ahora);
-  
-  let horaActual = ahora.getHours() + ahora.getMinutes()/60;
-  if (turno.turno === 'T3' && horaActual < 6) horaActual += 24;
+  const inicioTurnoReal = turno.inicio >= 24 ? turno.inicio - 24 : turno.inicio;
+  const inicioTurnoFecha = new Date(ahora);
+  inicioTurnoFecha.setHours(Math.floor(inicioTurnoReal), 0, 0, 0);
 
-  let horas = horaActual - turno.inicio;
-  if (opts.pausa) horas -= (10 / 60);
+  const horaActual = ahora.getHours() + ahora.getMinutes() / 60;
+  if (turno.turno === 'T3' && horaActual < 6) {
+    inicioTurnoFecha.setDate(inicioTurnoFecha.getDate() - 1);
+  }
 
-  return { turno: turno.turno, horasEfectivas: Math.max(0, horas) };
+  const horasTranscurridas = Math.max(0, (ahora - inicioTurnoFecha) / 3600000);
+  const descuento = calcularDescuentoAlimentacion('GENERAL', inicioTurnoFecha, ahora);
+  return { turno: turno.turno, horasEfectivas: Math.max(0, horasTranscurridas - descuento) };
 }
 
 function calcularCorteTurno(opts){
   const datosTurno = calcularTiempoEfectivoTurno(opts);
   const fechaCorte = new Date().toISOString();
-  
-  // Usa tu misma regla de 14:00 a 14:00 para alinear con el Dashboard
   const fechaOperativa = obtenerFechaOperativa(new Date()); 
   const resultado = [];
 
@@ -581,9 +594,8 @@ function calcularCorteTurno(opts){
   let totalReal = 0;
 
   lineasUnicas.forEach(function(linea){
-    const programado = calcularProgramadoLineaCorte(linea, fechaCorte, opts);
+    const programado = calcularProgramadoLineaCorte(linea, fechaCorte);
     
-    // Busca los registros que coinciden con el ciclo de 2pm a 2pm
     const real = state.historico
       .filter(r => r.linea === linea && r.fechaOperativa === fechaOperativa)
       .reduce((total, r) => total + Number(r.cantidadHora || 0), 0);
@@ -608,7 +620,7 @@ function calcularCorteTurno(opts){
   };
 }
 
-function calcularProgramadoLineaCorte(linea, fechaCorte, opts){
+function calcularProgramadoLineaCorte(linea, fechaCorte){
   const corte = new Date(fechaCorte);
   const datosTurno = obtenerTurnoActual(corte);
   const inicioTurnoReal = datosTurno.inicio >= 24 ? datosTurno.inicio - 24 : datosTurno.inicio;
@@ -617,14 +629,13 @@ function calcularProgramadoLineaCorte(linea, fechaCorte, opts){
   inicioTurnoFecha.setHours(Math.floor(inicioTurnoReal), 0, 0, 0);
   const horaCorteDecimal = corte.getHours() + (corte.getMinutes() / 60);
   
-  // Ajuste seguro para los turnos 3 que cruzan la medianoche
   if (datosTurno.turno === 'T3' && horaCorteDecimal < 6){
     inicioTurnoFecha.setDate(inicioTurnoFecha.getDate() - 1);
   }
 
   let totalProgramado = 0;
   let horasTotales = 0;
-  let descuentoAlimentacionTotal = 0;
+  let descuentoTotal = 0;
 
   const tramosLinea = state.historialOps.filter(x => x.linea === linea);
 
@@ -646,7 +657,7 @@ function calcularProgramadoLineaCorte(linea, fechaCorte, opts){
     horasTotales += horas;
     totalProgramado += horas * Number(tramo.uph || 0);
 
-    descuentoAlimentacionTotal += calcularDescuentoAlimentacion(linea, inicioTramo, finTramo);
+    descuentoTotal += calcularDescuentoAlimentacion(linea, inicioTramo, finTramo);
   });
 
   const horasTurnoTranscurridas = (corte - inicioTurnoFecha) / 3600000;
@@ -656,10 +667,7 @@ function calcularProgramadoLineaCorte(linea, fechaCorte, opts){
   }
 
   if (horasTotales > 0) {
-    let horasDescuento = descuentoAlimentacionTotal; 
-    if (opts && opts.pausa) horasDescuento += (10 / 60);
-    if (horasDescuento > horasTotales) horasDescuento = horasTotales;
-
+    let horasDescuento = Math.min(descuentoTotal, horasTotales);
     if (horasDescuento > 0) {
        const uphPromedio = totalProgramado / horasTotales;
        totalProgramado -= (horasDescuento * uphPromedio);

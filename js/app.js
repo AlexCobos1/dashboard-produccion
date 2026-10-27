@@ -139,14 +139,8 @@ document
 
 /* --- INICIO NUEVO EVENTO: BOTÓN CALCULAR CORTE --- */
 document.getElementById('btnCalcularCorte').addEventListener('click', async function(){
-  
-  // 1. Leer los checkboxes de la interfaz (Ya solo leemos la pausa)
-  const aplicaPausa = document.getElementById('chkPausaActiva').checked;
+  const resultadoCorte = calcularCorteTurno({});
 
-  // 2. Ejecutar la función matemática de logica.js (La cena ya es automática)
-  const resultadoCorte = calcularCorteTurno({ pausa: aplicaPausa });
-
-  // 3. Generar el ID consecutivo correcto (Ej: CORTE-0005)
   let ultimoNumero = 0;
   if (state.cortesTurno.length > 0) {
       const ultimoCorte = state.cortesTurno[state.cortesTurno.length - 1];
@@ -156,11 +150,8 @@ document.getElementById('btnCalcularCorte').addEventListener('click', async func
       }
   }
   const idFormateado = 'CORTE-' + String(ultimoNumero + 1).padStart(4, '0');
-
-  // 4. Obtener la fecha en formato compatible (YYYY-MM-DD) para no romper la tabla
   const fechaCorrecta = fechaISO(new Date());
 
-  // 5. Ensamblar el corte final
   const nuevoCorte = {
     id: idFormateado,
     fecha: fechaCorrecta,
@@ -168,22 +159,12 @@ document.getElementById('btnCalcularCorte').addEventListener('click', async func
     ...resultadoCorte
   };
 
-  // 6. Guardar en memoria y en almacenamiento local
   state.cortesTurno.push(nuevoCorte);
   await guardarCortesTurno();
 
-  // 7. Cerrar la ventana de los checkboxes
   document.getElementById('corteOverlay').classList.remove('show');
-
-  // 8. Refrescar la tabla para que aparezca el nuevo corte
-  renderHistorialCortes();
-
-  // 9. Mostrar el reporte detallado (el modal con el desglose por línea)
+  renderTodo();
   mostrarDetalleCorte(nuevoCorte);
-
-  // 10. Limpiar los checkboxes para el próximo corte
-  document.getElementById('chkPausaActiva').checked = false;
- 
 });
 /* --- FIN NUEVO EVENTO: BOTÓN CALCULAR CORTE --- */
 
@@ -546,8 +527,9 @@ async function verificarActualizaciones() {
     const histRaw = await storageGet(STORAGE_KEY_HIST) || "[]";
     const progRaw = await storageGet(STORAGE_KEY_PROG) || "[]";
     const opsRaw  = await storageGet(STORAGE_KEY_HISTORIAL_OPS) || "[]";
+    const alimRaw = await storageGet(STORAGE_KEY_ALIMENTACION) || "{}";
 
-    const pesoActual = histRaw.length + "-" + progRaw.length + "-" + opsRaw.length;
+    const pesoActual = histRaw.length + "-" + progRaw.length + "-" + opsRaw.length + "-" + alimRaw.length;
 
     if (pesoDatosAnterior === "") {
       pesoDatosAnterior = pesoActual;
@@ -559,6 +541,7 @@ async function verificarActualizaciones() {
       await inicializarEstado();
       pesoDatosAnterior = pesoActual;
       renderTodo();
+      renderHorariosAlim();
     }
   } catch (error) {
     console.error("Error validando actualizaciones:", error);
@@ -566,7 +549,17 @@ async function verificarActualizaciones() {
 }
 /* --- FIN NUEVO CÓDIGO --- */
 
-/* --- INICIO NUEVA LÓGICA: HORARIOS DE ALIMENTACIÓN (UNIFICADA) --- */
+/* --- INICIO NUEVA LÓGICA: HORARIOS DE ALIMENTACIÓN (2 GRUPOS) Y PAUSAS ACTIVAS HOH --- */
+function calcularHoraFinTexto(horaInicioStr, minutosSumar) {
+  if (!horaInicioStr || !horaInicioStr.includes(':')) return 'Sin programar';
+  const [h, m] = horaInicioStr.split(':').map(Number);
+  if (Number.isNaN(h) || Number.isNaN(m)) return 'Sin programar';
+  const totalMin = (h * 60 + m + minutosSumar) % (24 * 60);
+  const hh = String(Math.floor(totalMin / 60)).padStart(2, '0');
+  const mm = String(totalMin % 60).padStart(2, '0');
+  return `${horaInicioStr} → ${hh}:${mm}`;
+}
+
 function renderHorariosAlim() {
   const tbody = document.getElementById('tbodyHorariosAlim');
   if (!tbody) return;
@@ -582,34 +575,150 @@ function renderHorariosAlim() {
     { id: 'd_t2',  jornada: 'Domingos', turno: 'Turno 2' }
   ];
 
-  tbody.innerHTML = filas.map(f => `
-    <tr>
-      <td class="strong">${f.jornada}</td>
-      <td>${f.turno}</td>
-      <td>
-        <input type="time" id="alim_${f.id}_g1" value="${state.horariosAlim[`${f.id}_g1`] || ''}" style="padding:6px 10px; border:1px solid var(--border); border-radius:4px; font-family:var(--font-display); outline:none;">
-      </td>
-      <td>
-        <input type="time" id="alim_${f.id}_g2" value="${state.horariosAlim[`${f.id}_g2`] || ''}" style="padding:6px 10px; border:1px solid var(--border); border-radius:4px; font-family:var(--font-display); outline:none;">
-      </td>
-    </tr>
-  `).join('');
+  // Paleta HOH: Rojo Neón para alertas/inactivo y Azul Claro para rangos activos
+  const ESTILO_ROJO_NEON = 'color: #FF1744; font-weight: 700; text-shadow: 0 0 8px rgba(255, 23, 68, 0.35);';
+  const ESTILO_AZUL_CLARO = 'color: #3E97E0; font-weight: 600;';
+
+  tbody.innerHTML = filas.map(f => {
+    const valG1 = state.horariosAlim[`${f.id}_g1`] || '';
+    const valG2 = state.horariosAlim[`${f.id}_g2`] || '';
+    const valPausa = state.horariosAlim[`${f.id}_pausa`] || '';
+    
+    const turnoInactivo = !valG1 && !valG2 && !valPausa;
+    const sinG1 = !valG1;
+    const sinG2 = !valG2;
+    const sinPausa = !valPausa;
+
+    const estiloG1 = sinG1 ? ESTILO_ROJO_NEON : ESTILO_AZUL_CLARO;
+    const textoG1 = turnoInactivo ? '⚡ SIN OPERACIÓN' : (sinG1 ? '⚠️ FALTA G1' : calcularHoraFinTexto(valG1, 50));
+
+    const estiloG2 = sinG2 ? ESTILO_ROJO_NEON : ESTILO_AZUL_CLARO;
+    const textoG2 = turnoInactivo ? '⚡ SIN OPERACIÓN' : (sinG2 ? '⚠️ FALTA G2' : calcularHoraFinTexto(valG2, 50));
+
+    const estiloPausa = sinPausa ? ESTILO_ROJO_NEON : ESTILO_AZUL_CLARO;
+    const textoPausa = turnoInactivo ? '⚡ SIN OPERACIÓN' : (sinPausa ? '⚠️ FALTA PAUSA' : calcularHoraFinTexto(valPausa, 10));
+
+    const estiloFila = turnoInactivo ? 'background: rgba(255, 23, 68, 0.04);' : '';
+    
+    // Si está inactivo se enciende en Rojo Neón; si tiene horas queda opaco
+    const estiloBoton = turnoInactivo 
+      ? 'color: #FF1744; border-color: #FF1744; background: rgba(255, 23, 68, 0.06); text-shadow: 0 0 8px rgba(255, 23, 68, 0.35); font-weight: 700;' 
+      : 'color: var(--muted); border-color: var(--border); background: transparent; text-shadow: none; font-weight: normal;';
+
+    return `
+      <tr style="${estiloFila}">
+        <td class="strong">${f.jornada}</td>
+        <td>${f.turno}</td>
+        <td>
+          <div style="display:flex; align-items:center; gap:8px;">
+            <input type="time" id="alim_${f.id}_g1" value="${valG1}" data-min="50" data-label="FALTA G1" data-badge="badge_${f.id}_g1" style="padding:6px 10px; border:1px solid var(--border); border-radius:4px; font-family:var(--font-display); outline:none;">
+            <span id="badge_${f.id}_g1" style="font-size:11px; ${estiloG1}">${textoG1}</span>
+          </div>
+        </td>
+        <td>
+          <div style="display:flex; align-items:center; gap:8px;">
+            <input type="time" id="alim_${f.id}_g2" value="${valG2}" data-min="50" data-label="FALTA G2" data-badge="badge_${f.id}_g2" style="padding:6px 10px; border:1px solid var(--border); border-radius:4px; font-family:var(--font-display); outline:none;">
+            <span id="badge_${f.id}_g2" style="font-size:11px; ${estiloG2}">${textoG2}</span>
+          </div>
+        </td>
+        <td>
+          <div style="display:flex; align-items:center; gap:8px;">
+            <input type="time" id="alim_${f.id}_pausa" value="${valPausa}" data-min="10" data-label="FALTA PAUSA" data-badge="badge_${f.id}_pausa" style="padding:6px 10px; border:1px solid var(--border); border-radius:4px; font-family:var(--font-display); outline:none;">
+            <span id="badge_${f.id}_pausa" style="font-size:11px; ${estiloPausa}">${textoPausa}</span>
+          </div>
+        </td>
+        <td>
+          <button type="button" class="btn btn-ghost btn-sm" onclick="marcarTurnoSinOperacion('${f.id}', this)" style="${estiloBoton}" title="Dejar este turno sin operación ni cálculos">∅ Sin Operación</button>
+        </td>
+      </tr>
+    `;
+  }).join('');
+
+  // Actualización visual inmediata al digitar una hora
+  tbody.querySelectorAll('input[type="time"]').forEach(inp => {
+    inp.addEventListener('input', () => {
+      const badge = document.getElementById(inp.dataset.badge);
+      const tr = inp.closest('tr');
+      const btn = tr.querySelector('button');
+
+      if (badge) {
+        const minutos = Number(inp.dataset.min);
+        if (inp.value) {
+          badge.style.color = '#3E97E0';
+          badge.style.fontWeight = '600';
+          badge.style.textShadow = 'none';
+          badge.textContent = calcularHoraFinTexto(inp.value, minutos);
+        } else {
+          badge.style.color = '#FF1744';
+          badge.style.fontWeight = '700';
+          badge.style.textShadow = '0 0 8px rgba(255, 23, 68, 0.35)';
+          badge.textContent = `⚠️ ${inp.dataset.label}`;
+        }
+      }
+
+      const valA1 = tr.querySelector('[id$="_g1"]').value;
+      const valA2 = tr.querySelector('[id$="_g2"]').value;
+      const valP  = tr.querySelector('[id$="_pausa"]').value;
+
+      // Si hay al menos una hora ingresada, el botón vuelve a verse opaco
+      if (valA1 || valA2 || valP) {
+        btn.style.color = 'var(--muted)';
+        btn.style.borderColor = 'var(--border)';
+        btn.style.background = 'transparent';
+        btn.style.textShadow = 'none';
+        btn.style.fontWeight = 'normal';
+        tr.style.background = 'transparent';
+      } else {
+        btn.style.color = '#FF1744';
+        btn.style.borderColor = '#FF1744';
+        btn.style.background = 'rgba(255, 23, 68, 0.06)';
+        btn.style.textShadow = '0 0 8px rgba(255, 23, 68, 0.35)';
+        btn.style.fontWeight = '700';
+        tr.style.background = 'rgba(255, 23, 68, 0.04)';
+      }
+    });
+  });
 }
 
-document.getElementById('btnGuardarAlimentacion')?.addEventListener('click', async () => {
-   // 1. Solicitar clave de analista
-   const claveIngresada = prompt('Ingrese la clave de analista para modificar los horarios de alimentación:');
+window.marcarTurnoSinOperacion = function(idTurno, btnEl) {
+  ['g1', 'g2', 'pausa'].forEach(suf => {
+    const input = document.getElementById(`alim_${idTurno}_${suf}`);
+    if (input) input.value = '';
+    const badge = document.getElementById(`badge_${idTurno}_${suf}`);
+    if (badge) {
+      badge.textContent = '⚡ SIN OPERACIÓN';
+      badge.style.color = '#FF1744';
+      badge.style.fontWeight = '700';
+      badge.style.textShadow = '0 0 8px rgba(255, 23, 68, 0.35)';
+    }
+    state.horariosAlim[`${idTurno}_${suf}`] = '';
+  });
 
-   // Si cancela el cuadro, no hacemos nada
+  const filaBoton = btnEl ? btnEl.closest('tr') : (typeof event !== 'undefined' && event ? event.target.closest('tr') : null);
+  if (filaBoton) {
+    filaBoton.style.background = 'rgba(255, 23, 68, 0.04)';
+    const btnOp = filaBoton.querySelector('button');
+    if (btnOp) {
+      btnOp.style.color = '#FF1744';
+      btnOp.style.borderColor = '#FF1744';
+      btnOp.style.background = 'rgba(255, 23, 68, 0.06)';
+      btnOp.style.textShadow = '0 0 8px rgba(255, 23, 68, 0.35)';
+      btnOp.style.fontWeight = '700';
+    }
+  }
+
+  modalAlerta('Turno sin operación', `Se ha marcado el ${idTurno.toUpperCase()} como inactivo en Rojo Neón. Haz clic en "Guardar Horarios" para aplicar los cambios.`);
+};
+
+document.getElementById('btnGuardarAlimentacion')?.addEventListener('click', async () => {
+   const claveIngresada = prompt('Ingrese la clave de analista para modificar los horarios de alimentación y pausas activas:');
    if (claveIngresada === null) return;
 
-   // 2. Validar que la clave sea correcta
    if (claveIngresada.trim() !== ANALISTA_PIN) {
      await modalError('Acceso denegado', 'La clave de analista es incorrecta. No se guardaron los cambios.');
      return;
    }
 
-   // 3. Si la clave es correcta, procedemos a guardar
    const inputs = document.querySelectorAll('input[type="time"][id^="alim_"]');
    inputs.forEach(inp => {
       const key = inp.id.replace('alim_', '');
@@ -617,9 +726,12 @@ document.getElementById('btnGuardarAlimentacion')?.addEventListener('click', asy
    });
    
    await guardarHorariosAlim();
+   renderTodo();
+   renderHorariosAlim();
+
    await modalExito(
      'Horarios Guardados', 
-     'El sistema descontará automáticamente 50 minutos del plan esperado en los horarios establecidos.'
+     'El sistema descontará automáticamente 50 minutos por grupo de alimentación y 10 minutos de pausas activas según los horarios establecidos.'
    );
 });
 /* --- FIN NUEVA LÓGICA --- */
@@ -633,13 +745,10 @@ async function init(){
 
   document.getElementById('fUsuario').value = state.usuario || '';
   renderTodo();
-  
-  // AQUÍ DIBUJAMOS LOS HORARIOS
   renderHorariosAlim(); 
   
   actualizarReloj();
   setInterval(actualizarReloj, 1000);
-  
   setInterval(verificarActualizaciones, 20000);
 }
 init();
